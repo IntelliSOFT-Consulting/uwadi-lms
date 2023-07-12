@@ -18,12 +18,12 @@ We will not collect any personal information about you without your permission. 
 YOUR RIGHTS
 In this Section, we have summarized the rights that you have under data protection law. Some of the rights are complex, and not all of the details have been included in our summaries. Accordingly, you should read the relevant laws and guidance from the regulatory authorities for a full explanation of these rights.
 Your principal rights under data protection law are:
-the right to access;
-the right to rectification;
-the right to erasure;
-the right to restrict processing;
-the right to object to processing;
-the right to data portability;
+the right to access; 
+the right to rectification; 
+the right to erasure; 
+the right to restrict processing; 
+the right to object to processing; 
+the right to data portability; 
 the right to complain to a supervisory authority; and
 the right to withdraw consent.
 You have the right to confirm as to whether or not we process your personal data and, where we do, access to the personal data, together with certain additional information. That additional information includes details of the purposes of the processing, the categories of personal data concerned and the recipients of the personal data. Providing the rights and freedoms of others are not affected, we will supply to you a copy of your personal data free of charge.
@@ -40,7 +40,7 @@ To the extent that the legal basis for our processing of your personal informati
 You may exercise any of your rights in relation to your personal data by contacting us as set out below.
 DATA RETENTION AND DELETION
 We will keep your personal data after we have finished our contractual arrangements with you. We will do so for one of these reasons:
-To respond to any questions, complaints or claims made by you or on your behalf;
+To respond to any questions, complaints or claims made by you or on your behalf; 
 To keep records required by law; and
 To re-engage with you.
 We will not retain your data for longer than necessary for the purposes set out in this policy. When it is no longer necessary to retain your personal data, we will delete or anonymise it. We will share personal information with authorities if required by applicable law.
@@ -58,6 +58,3 @@ We may notify you of changes to this policy by email.
 
 CREDIT
 This document was created in light of the Kenya Data Protection Act, 2019 and subsidiary legislations (http://kenyalaw.org:8181/exist/kenyalex/sublegview.xql?subleg=No.%2024%20of%202019#doc-2) 
-
-
-
