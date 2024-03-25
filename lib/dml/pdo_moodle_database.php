@@ -429,7 +429,7 @@ abstract class pdo_moodle_database extends moodle_database {
     /**
      * Update record in database, as fast as possible, no safety checks, lobs not supported.
      * @param string $table name
-     * @param mixed $params data record as object or array
+     * @param stdClass|array $params data record as object or array
      * @param bool true means repeated updates expected
      * @return bool success
      */
@@ -534,7 +534,7 @@ abstract class pdo_moodle_database extends moodle_database {
         return $this->execute($sql, $params);
     }
 
-    public function sql_concat() {
+    public function sql_concat(...$arr) {
         throw new \moodle_exception('TODO');
     }
 
@@ -614,12 +614,12 @@ abstract class pdo_moodle_database extends moodle_database {
      * Overridden to ensure $this->lastErorr is reset each query
      *
      * @param string $sql
-     * @param array array of parameters
+     * @param array|null $params An array of parameters.
      * @param int $type type of query
      * @param mixed $extrainfo driver specific extra information
      * @return void
      */
-    protected function query_start($sql, array $params=null, $type, $extrainfo=null) {
+    protected function query_start($sql, ?array $params, $type, $extrainfo=null) {
         $this->lastError = null;
         parent::query_start($sql, $params, $type, $extrainfo);
     }

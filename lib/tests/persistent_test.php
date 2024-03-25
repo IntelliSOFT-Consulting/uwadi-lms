@@ -14,14 +14,6 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * Persistent class tests.
- *
- * @package    core
- * @copyright  2015 Frédéric Massart - FMCorz.net
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-
 namespace core;
 
 use advanced_testcase;
@@ -29,8 +21,6 @@ use coding_exception;
 use dml_missing_record_exception;
 use lang_string;
 use xmldb_table;
-
-defined('MOODLE_INTERNAL') || die();
 
 /**
  * Persistent testcase.
@@ -174,9 +164,26 @@ class persistent_test extends advanced_testcase {
     }
 
     /**
+     * Test filtering record properties returns only those defined by the persistent
+     */
+    public function test_properties_filter(): void {
+        $result = core_testable_persistent::properties_filter((object) [
+            'idnumber' => '123',
+            'sortorder' => 1,
+            'invalidparam' => 'abc',
+        ]);
+
+        // We should get back all data except invalid param.
+        $this->assertEquals([
+            'idnumber' => '123',
+            'sortorder' => 1,
+        ], $result);
+    }
+
+    /**
      * Test creating persistent instance by specifying record ID in constructor
      */
-    public function test_constructor() : void {
+    public function test_constructor(): void {
         $persistent = (new core_testable_persistent(0, (object) [
             'idnumber' => '123',
             'sortorder' => 1,
@@ -692,6 +699,27 @@ class persistent_test extends advanced_testcase {
 class core_testable_persistent extends persistent {
 
     const TABLE = 'phpunit_persistent';
+
+    /** @var bool before validate status. */
+    public ?bool $beforevalidate;
+
+    /** @var bool before create status. */
+    public ?bool $beforecreate;
+
+    /** @var bool before update status. */
+    public ?bool $beforeupdate;
+
+    /** @var bool before delete status. */
+    public ?bool $beforedelete;
+
+    /** @var bool after create status. */
+    public ?bool $aftercreate;
+
+    /** @var bool after update status. */
+    public ?bool $afterupdate;
+
+    /** @var bool after delete status. */
+    public ?bool $afterdelete;
 
     protected static function define_properties() {
         return array(

@@ -677,7 +677,7 @@ function feedback_reset_userdata($data) {
  *
  * @global object
  * @uses FEEDBACK_RESETFORM_RESET
- * @param object $mform form passed by reference
+ * @param MoodleQuickForm $mform form passed by reference
  */
 function feedback_reset_course_form_definition(&$mform) {
     global $COURSE, $DB;
@@ -1181,7 +1181,7 @@ function feedback_get_receivemail_users($cmid, $groups = false) {
  * @param int $courseid
  * @param string $name the name of template shown in the templatelist
  * @param int $ispublic 0:privat 1:public
- * @return int the new templateid
+ * @return stdClass the new template
  */
 function feedback_create_template($courseid, $name, $ispublic = 0) {
     global $DB;
@@ -1458,6 +1458,8 @@ function feedback_get_template_list($course, $onlyownorpublic = '') {
  */
 function feedback_get_item_class($typ) {
     global $CFG;
+
+    require_once($CFG->dirroot.'/mod/feedback/item/feedback_item_class.php');
 
     //get the class of item-typ
     $itemclass = 'feedback_item_'.$typ;
@@ -1878,10 +1880,10 @@ function feedback_set_tmp_values($feedbackcompleted) {
  *
  * @global object
  * @param object $feedbackcompletedtmp the temporary completed
- * @param object $feedbackcompleted the target completed
+ * @param stdClass|null $feedbackcompleted the target completed
  * @return int the id of the completed
  */
-function feedback_save_tmp_values($feedbackcompletedtmp, $feedbackcompleted) {
+function feedback_save_tmp_values($feedbackcompletedtmp, ?stdClass $feedbackcompleted = null) {
     global $DB;
 
     $tmpcplid = $feedbackcompletedtmp->id;
@@ -1966,7 +1968,7 @@ function feedback_delete_completedtmp() {
  *
  * @global object
  * @param int $feedbackid
- * @return mixed false if there already is a pagebreak on last position or the id of the pagebreak-item
+ * @return int|false false if there already is a pagebreak on last position or the id of the pagebreak-item
  */
 function feedback_create_pagebreak($feedbackid) {
     global $DB;
@@ -2785,7 +2787,7 @@ function feedback_send_email_html($info, $course, $cm) {
 function feedback_encode_target_url($url) {
     if (strpos($url, '?')) {
         list($part1, $part2) = explode('?', $url, 2); //maximal 2 parts
-        return $part1 . '?' . htmlentities($part2);
+        return $part1 . '?' . htmlentities($part2, ENT_COMPAT);
     } else {
         return $url;
     }

@@ -16,6 +16,7 @@
 
 namespace mod_survey;
 
+use core_external\external_api;
 use externallib_advanced_testcase;
 use mod_survey_external;
 
@@ -37,6 +38,30 @@ require_once($CFG->dirroot . '/mod/survey/lib.php');
  */
 class externallib_test extends externallib_advanced_testcase {
 
+    /** @var \stdClass course record. */
+    protected $course;
+
+    /** @var \stdClass activity record. */
+    protected $survey;
+
+    /** @var \context_module context instance. */
+    protected $context;
+
+    /** @var \StdClass course module. */
+    protected $cm;
+
+    /** @var \StdClass student record. */
+    protected $student;
+
+    /** @var \StdClass teacher record. */
+    protected $teacher;
+
+    /** @var \StdClass student role. */
+    protected $studentrole;
+
+    /** @var \StdClass teacher role. */
+    protected $teacherrole;
+
     /**
      * Set up for every test
      */
@@ -44,6 +69,10 @@ class externallib_test extends externallib_advanced_testcase {
         global $DB;
         $this->resetAfterTest();
         $this->setAdminUser();
+
+        // Survey module is disabled by default, enable it for testing.
+        $manager = \core_plugin_manager::resolve_plugininfo_class('mod');
+        $manager::enable_plugin('survey', 1);
 
         // Setup test data.
         $this->course = $this->getDataGenerator()->create_course();
@@ -132,14 +161,14 @@ class externallib_test extends externallib_advanced_testcase {
 
         // Call the external function passing course ids.
         $result = mod_survey_external::get_surveys_by_courses(array($course2->id, $this->course->id));
-        $result = \external_api::clean_returnvalue($returndescription, $result);
+        $result = external_api::clean_returnvalue($returndescription, $result);
 
         $this->assertEquals($expectedsurveys, $result['surveys']);
         $this->assertCount(0, $result['warnings']);
 
         // Call the external function without passing course id.
         $result = mod_survey_external::get_surveys_by_courses();
-        $result = \external_api::clean_returnvalue($returndescription, $result);
+        $result = external_api::clean_returnvalue($returndescription, $result);
         $this->assertEquals($expectedsurveys, $result['surveys']);
         $this->assertCount(0, $result['warnings']);
 
@@ -149,7 +178,7 @@ class externallib_test extends externallib_advanced_testcase {
 
         // Call the external function without passing course id.
         $result = mod_survey_external::get_surveys_by_courses();
-        $result = \external_api::clean_returnvalue($returndescription, $result);
+        $result = external_api::clean_returnvalue($returndescription, $result);
         $this->assertEquals($expectedsurveys, $result['surveys']);
 
         // Call for the second course we unenrolled the user from, expected warning.
@@ -168,14 +197,14 @@ class externallib_test extends externallib_advanced_testcase {
         }
 
         $result = mod_survey_external::get_surveys_by_courses();
-        $result = \external_api::clean_returnvalue($returndescription, $result);
+        $result = external_api::clean_returnvalue($returndescription, $result);
         $this->assertEquals($expectedsurveys, $result['surveys']);
 
         // Admin also should get all the information.
         self::setAdminUser();
 
         $result = mod_survey_external::get_surveys_by_courses(array($this->course->id));
-        $result = \external_api::clean_returnvalue($returndescription, $result);
+        $result = external_api::clean_returnvalue($returndescription, $result);
         $this->assertEquals($expectedsurveys, $result['surveys']);
 
         // Now, prohibit capabilities.
@@ -186,7 +215,7 @@ class externallib_test extends externallib_advanced_testcase {
         accesslib_clear_all_caches_for_unit_testing();
 
         $surveys = mod_survey_external::get_surveys_by_courses(array($this->course->id));
-        $surveys = \external_api::clean_returnvalue(mod_survey_external::get_surveys_by_courses_returns(), $surveys);
+        $surveys = external_api::clean_returnvalue(mod_survey_external::get_surveys_by_courses_returns(), $surveys);
         $this->assertFalse(isset($surveys['surveys'][0]['intro']));
     }
 
@@ -221,7 +250,7 @@ class externallib_test extends externallib_advanced_testcase {
         $sink = $this->redirectEvents();
 
         $result = mod_survey_external::view_survey($this->survey->id);
-        $result = \external_api::clean_returnvalue(mod_survey_external::view_survey_returns(), $result);
+        $result = external_api::clean_returnvalue(mod_survey_external::view_survey_returns(), $result);
         $this->assertTrue($result['status']);
 
         $events = $sink->get_events();
@@ -275,7 +304,7 @@ class externallib_test extends externallib_advanced_testcase {
         }
 
         $result = mod_survey_external::get_questions($this->survey->id);
-        $result = \external_api::clean_returnvalue(mod_survey_external::get_questions_returns(), $result);
+        $result = external_api::clean_returnvalue(mod_survey_external::get_questions_returns(), $result);
 
         // Check we receive the same questions.
         $this->assertCount(0, $result['warnings']);
@@ -339,7 +368,7 @@ class externallib_test extends externallib_advanced_testcase {
         }
 
         $result = mod_survey_external::submit_answers($this->survey->id, $realquestions);
-        $result = \external_api::clean_returnvalue(mod_survey_external::submit_answers_returns(), $result);
+        $result = external_api::clean_returnvalue(mod_survey_external::submit_answers_returns(), $result);
 
         $this->assertTrue($result['status']);
         $this->assertCount(0, $result['warnings']);

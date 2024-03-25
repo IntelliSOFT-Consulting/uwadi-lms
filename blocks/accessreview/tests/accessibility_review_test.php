@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-namespace block_accessreview\tests;
+namespace block_accessreview;
 
 use ReflectionClass;
 use advanced_testcase;
@@ -39,7 +39,6 @@ class accessibility_review_test extends advanced_testcase {
     public function test_get_toggle_link() {
         $rc = new ReflectionClass(block_accessreview::class);
         $rm = $rc->getMethod('get_toggle_link');
-        $rm->setAccessible(true);
 
         $block = new block_accessreview();
         $output = $rm->invoke($block);
@@ -60,7 +59,6 @@ class accessibility_review_test extends advanced_testcase {
 
         $rc = new ReflectionClass(block_accessreview::class);
         $rm = $rc->getMethod('get_download_link');
-        $rm->setAccessible(true);
         $block = new block_accessreview();
 
         $this->setUser($user1);
@@ -86,7 +84,6 @@ class accessibility_review_test extends advanced_testcase {
 
         $rc = new ReflectionClass(block_accessreview::class);
         $rm = $rc->getMethod('get_report_link');
-        $rm->setAccessible(true);
         $block = new block_accessreview();
 
         $this->setUser($user1);

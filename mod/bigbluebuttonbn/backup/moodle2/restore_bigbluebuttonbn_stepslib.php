@@ -24,8 +24,6 @@
  * @author    Jesus Federico  (jesus [at] blindsidenetworks [dt] com)
  */
 
-defined('MOODLE_INTERNAL') || die();
-
 /**
  * Define all the restore steps that will be used by the restore_url_activity_task.
  *
@@ -41,9 +39,11 @@ class restore_bigbluebuttonbn_activity_structure_step extends restore_activity_s
      */
     protected function define_structure() {
         $paths = [];
-        $paths[] = new restore_path_element('bigbluebuttonbn', '/activity/bigbluebuttonbn');
+        $bbb = new restore_path_element('bigbluebuttonbn', '/activity/bigbluebuttonbn');
+        $paths[] = $bbb;
         $paths[] = new restore_path_element('bigbluebuttonbn_logs', '/activity/bigbluebuttonbn/logs/log');
         $paths[] = new restore_path_element('bigbluebuttonbn_recordings', '/activity/bigbluebuttonbn/recordings/recording');
+        $this->add_subplugin_structure('bbbext', $bbb);
         // Return the paths wrapped into standard activity structure.
         return $this->prepare_activity_structure($paths);
     }
@@ -59,6 +59,11 @@ class restore_bigbluebuttonbn_activity_structure_step extends restore_activity_s
         $data = (object) $data;
         $data->course = $this->get_courseid();
         $data->timemodified = $this->apply_date_offset($data->timemodified);
+        // Check if we are in backup::MODE_IMPORT (we set a new meetingid) or backup::MODE_GENERAL (we keep the same meetingid).
+        if ($this->get_task()->get_info()->mode == backup::MODE_IMPORT || empty($data->meetingid)) {
+            // We are in backup::MODE_IMPORT, we need to renew the meetingid.
+            $data->meetingid = \mod_bigbluebuttonbn\meeting::get_unique_meetingid_seed();
+        }
         // Insert the bigbluebuttonbn record.
         $newitemid = $DB->insert_record('bigbluebuttonbn', $data);
         // Immediately after inserting "activity" record, call this.
@@ -107,7 +112,7 @@ class restore_bigbluebuttonbn_activity_structure_step extends restore_activity_s
     /**
      * Actions to be executed after the restore is completed
      *
-     * @return array
+     * @return void
      */
     protected function after_execute() {
         // Add bigbluebuttonbn related files, no need to match by itemname (just internally handled context).

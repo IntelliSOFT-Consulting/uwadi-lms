@@ -16,6 +16,8 @@
 
 namespace format_topics;
 
+use core_external\external_api;
+
 defined('MOODLE_INTERNAL') || die();
 
 global $CFG;
@@ -27,6 +29,7 @@ require_once($CFG->dirroot . '/course/lib.php');
  * @package    format_topics
  * @copyright  2015 Marina Glancy
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @covers     \format_topics
  */
 class format_topics_test extends \advanced_testcase {
 
@@ -115,7 +118,7 @@ class format_topics_test extends \advanced_testcase {
                 $sectionname = get_string('section0name', 'format_topics');
                 $this->assertEquals($sectionname, $courseformat->get_default_section_name($section));
             } else {
-                $sectionname = get_string('sectionname', 'format_topics') . ' ' . $section->section;
+                $sectionname = get_string('newsection', 'format_topics');
                 $this->assertEquals($sectionname, $courseformat->get_default_section_name($section));
             }
         }
@@ -151,7 +154,7 @@ class format_topics_test extends \advanced_testcase {
         $this->getDataGenerator()->enrol_user($user->id, $course->id, $teacherrole->id);
 
         $res = \core_external::update_inplace_editable('format_topics', 'sectionname', $section->id, 'New section name');
-        $res = \external_api::clean_returnvalue(\core_external::update_inplace_editable_returns(), $res);
+        $res = external_api::clean_returnvalue(\core_external::update_inplace_editable_returns(), $res);
         $this->assertEquals('New section name', $res['value']);
         $this->assertEquals('New section name', $DB->get_field('course_sections', 'name', ['id' => $section->id]));
     }
@@ -230,15 +233,13 @@ class format_topics_test extends \advanced_testcase {
     }
 
     /**
-     * Test for get_view_url() to ensure that the url is only given for the correct cases.
+     * Test for get_view_url().
      *
-     * @return void
+     * @covers ::get_view_url
      */
-    public function test_get_view_url() {
+    public function test_get_view_url(): void {
         global $CFG;
         $this->resetAfterTest();
-
-        $linkcoursesections = $CFG->linkcoursesections;
 
         // Generate a course with two sections (0 and 1) and two modules.
         $generator = $this->getDataGenerator();
@@ -250,21 +251,34 @@ class format_topics_test extends \advanced_testcase {
         $format->update_course_format_options($data);
 
         // In page.
-        $CFG->linkcoursesections = 0;
-        $this->assertNotEmpty($format->get_view_url(null));
-        $this->assertNotEmpty($format->get_view_url(0));
-        $this->assertNotEmpty($format->get_view_url(1));
-        $CFG->linkcoursesections = 1;
         $this->assertNotEmpty($format->get_view_url(null));
         $this->assertNotEmpty($format->get_view_url(0));
         $this->assertNotEmpty($format->get_view_url(1));
 
         // Navigation.
-        $CFG->linkcoursesections = 0;
-        $this->assertNull($format->get_view_url(1, ['navigation' => 1]));
-        $this->assertNull($format->get_view_url(0, ['navigation' => 1]));
-        $CFG->linkcoursesections = 1;
-        $this->assertNotEmpty($format->get_view_url(1, ['navigation' => 1]));
-        $this->assertNotEmpty($format->get_view_url(0, ['navigation' => 1]));
+        $this->assertStringContainsString('course/view.php', $format->get_view_url(0));
+        $this->assertStringContainsString('course/view.php', $format->get_view_url(1));
+        $this->assertStringContainsString('course/section.php', $format->get_view_url(0, ['navigation' => 1]));
+        $this->assertStringContainsString('course/section.php', $format->get_view_url(1, ['navigation' => 1]));
+        // When sr parameter is defined, the section.php page should be returned.
+        $this->assertStringContainsString('course/section.php', $format->get_view_url(0, ['sr' => 1]));
+        $this->assertStringContainsString('course/section.php', $format->get_view_url(1, ['sr' => 1]));
+        $this->assertStringContainsString('course/section.php', $format->get_view_url(0, ['sr' => 0]));
+        $this->assertStringContainsString('course/section.php', $format->get_view_url(1, ['sr' => 0]));
+    }
+
+    /**
+     * Test get_required_jsfiles().
+     *
+     * @covers ::get_required_jsfiles
+     */
+    public function test_get_required_jsfiles(): void {
+        $this->resetAfterTest();
+
+        $generator = $this->getDataGenerator();
+
+        $course = $generator->create_course(['format' => 'topics']);
+        $format = course_get_format($course);
+        $this->assertEmpty($format->get_required_jsfiles());
     }
 }

@@ -74,8 +74,8 @@ class user_profile_fields {
      * @return profile_field_base[]
      */
     private function get_user_profile_fields(): array {
-        return array_filter(profile_get_user_fields_with_data(0), static function($profilefield): bool {
-            return (int)$profilefield->field->visible === (int)PROFILE_VISIBLE_ALL;
+        return array_filter(profile_get_user_fields_with_data(0), static function(profile_field_base $profilefield): bool {
+            return $profilefield->is_visible();
         });
     }
 
@@ -113,19 +113,61 @@ class user_profile_fields {
     }
 
     /**
+     * Get table alias for given profile field
+     *
+     * The entity name is used to ensure the alias differs when the entity is used multiple times within the same report, each
+     * having their own table alias/join
+     *
+     * @param profile_field_base $profilefield
+     * @return string
+     */
+    private function get_table_alias(profile_field_base $profilefield): string {
+        static $aliases = [];
+
+        $aliaskey = "{$this->entityname}_{$profilefield->fieldid}";
+        if (!array_key_exists($aliaskey, $aliases)) {
+            $aliases[$aliaskey] = database::generate_alias();
+        }
+
+        return $aliases[$aliaskey];
+    }
+
+    /**
+     * Get table join for given profile field
+     *
+     * @param profile_field_base $profilefield
+     * @return string
+     */
+    private function get_table_join(profile_field_base $profilefield): string {
+        $userinfotablealias = $this->get_table_alias($profilefield);
+
+        return "LEFT JOIN {user_info_data} {$userinfotablealias}
+                       ON {$userinfotablealias}.userid = {$this->usertablefieldalias}
+                      AND {$userinfotablealias}.fieldid = {$profilefield->fieldid}";
+    }
+
+    /**
      * Return the user profile fields visible columns.
      *
      * @return column[]
      */
     public function get_columns(): array {
+        global $DB;
+
         $columns = [];
-
         foreach ($this->userprofilefields as $profilefield) {
-            $userinfotablealias = database::generate_alias();
-
             $columntype = $this->get_user_field_type($profilefield->field->datatype);
+            $columnfieldsql = $this->get_table_alias($profilefield) . '.data';
 
-            $column = (new column(
+            // Numeric (checkbox/time) fields should be cast, as should all fields for Oracle, for aggregation support.
+            if ($columntype === column::TYPE_BOOLEAN || $columntype === column::TYPE_TIMESTAMP) {
+                $columnfieldsql = "CASE WHEN {$columnfieldsql} IS NULL THEN NULL ELSE " .
+                    $DB->sql_cast_char2int($columnfieldsql, true) . " END";
+            } else if ($DB->get_dbfamily() === 'oracle') {
+                $columnfieldsql = $DB->sql_order_by_text($columnfieldsql, 1024);
+            }
+
+            $columns[] = (new column(
                 'profilefield_' . core_text::strtolower($profilefield->field->shortname),
                 new lang_string('customfieldcolumn', 'core_reportbuilder',
                     format_string($profilefield->field->name, true,
@@ -133,15 +175,18 @@ class user_profile_fields {
                 $this->entityname
             ))
                 ->add_joins($this->get_joins())
-                ->add_join("LEFT JOIN {user_info_data} {$userinfotablealias} " .
-                    "ON {$userinfotablealias}.userid = {$this->usertablefieldalias} " .
-                    "AND {$userinfotablealias}.fieldid = {$profilefield->fieldid}")
-                ->add_field("{$userinfotablealias}.data")
+                ->add_join($this->get_table_join($profilefield))
+                ->add_field($columnfieldsql, 'data')
                 ->set_type($columntype)
                 ->set_is_sortable($columntype !== column::TYPE_LONGTEXT)
-                ->add_callback([$this, 'format_profile_field'], $profilefield);
+                ->add_callback(static function($value, stdClass $row, profile_field_base $field): string {
+                    if ($value === null) {
+                        return '';
+                    }
 
-            $columns[] = $column;
+                    $field->data = $value;
+                    return (string) $field->display_data();
+                }, $profilefield);
         }
 
         return $columns;
@@ -157,8 +202,7 @@ class user_profile_fields {
 
         $filters = [];
         foreach ($this->userprofilefields as $profilefield) {
-            $userinfotablealias = database::generate_alias();
-            $field = "{$userinfotablealias}.data";
+            $field = $this->get_table_alias($profilefield) . '.data';
             $params = [];
 
             switch ($profilefield->field->datatype) {
@@ -168,7 +212,7 @@ class user_profile_fields {
                     break;
                 case 'datetime':
                     $classname = date::class;
-                    $fieldsql = $DB->sql_cast_char2int($field);
+                    $fieldsql = $DB->sql_cast_char2int($field, true);
                     break;
                 case 'menu':
                     $classname = select::class;
@@ -201,9 +245,7 @@ class user_profile_fields {
                 $params
             ))
                 ->add_joins($this->get_joins())
-                ->add_join("LEFT JOIN {user_info_data} {$userinfotablealias} " .
-                    "ON {$userinfotablealias}.userid = {$this->usertablefieldalias} " .
-                    "AND {$userinfotablealias}.fieldid = {$profilefield->fieldid}");
+                ->add_join($this->get_table_join($profilefield));
 
             // If menu type then set filter options as appropriate.
             if ($profilefield->field->datatype === 'menu') {
@@ -240,23 +282,5 @@ class user_profile_fields {
                 break;
         }
         return $customfieldtype;
-    }
-
-    /**
-     * Formatter for a profile field. It formats the field according to its type.
-     *
-     * @param mixed $value
-     * @param stdClass $row
-     * @param profile_field_base $field
-     * @return string
-     */
-    public static function format_profile_field($value, stdClass $row, profile_field_base $field): string {
-        // Special handling of checkboxes, we want to display their boolean state rather than the input element itself.
-        if (is_a($field, 'profile_field_checkbox')) {
-            return format::boolean_as_text($value);
-        }
-
-        $field->data = $value;
-        return (string) $field->display_data();
     }
 }

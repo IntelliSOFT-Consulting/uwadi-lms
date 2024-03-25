@@ -19,6 +19,7 @@ namespace qtype_multianswer;
 use question_attempt_step;
 use question_display_options;
 use question_state;
+use question_testcase;
 
 defined('MOODLE_INTERNAL') || die();
 
@@ -199,7 +200,7 @@ class question_test extends \advanced_testcase {
                            2 => array('sub1_answer' => 'Owl', 'sub2_answer' => $right),
                           );
         $finalgrade = $question->compute_final_grade($responses, 1);
-        $this->assertEquals(1 / 3 * (1 - 0.2) + 2 / 3 * (1 - 2 * 0.2), $finalgrade);
+        $this->assertEqualsWithDelta(1 / 3 * (1 - 0.2) + 2 / 3 * (1 - 2 * 0.2), $finalgrade, question_testcase::GRADE_DELTA);
 
         // Get subquestion 1 right at 3rd try and subquestion 2 right at 2nd try.
         $responses = array(0 => array('sub1_answer' => 'Dog', 'sub2_answer' => $wrong),
@@ -208,7 +209,7 @@ class question_test extends \advanced_testcase {
                            3 => array('sub1_answer' => 'Owl', 'sub2_answer' => $right),
                           );
         $finalgrade = $question->compute_final_grade($responses, 1);
-        $this->assertEquals(1 / 3 * (1 - 2 * 0.2) + 2 / 3 * (1 - 0.2), $finalgrade);
+        $this->assertEqualsWithDelta(1 / 3 * (1 - 2 * 0.2) + 2 / 3 * (1 - 0.2), $finalgrade, question_testcase::GRADE_DELTA);
 
         // Get subquestion 1 right at 4th try and subquestion 2 right at 1st try.
         $responses = array(0 => array('sub1_answer' => 'Dog', 'sub2_answer' => $right),
@@ -217,7 +218,7 @@ class question_test extends \advanced_testcase {
                            3 => array('sub1_answer' => 'Owl', 'sub2_answer' => $right),
                           );
         $finalgrade = $question->compute_final_grade($responses, 1);
-        $this->assertEquals(1 / 3 * (1 - 3 * 0.2) + 2 / 3, $finalgrade);
+        $this->assertEqualsWithDelta(1 / 3 * (1 - 3 * 0.2) + 2 / 3, $finalgrade, question_testcase::GRADE_DELTA);
 
         // Get subquestion 1 right at 4th try and subquestion 2 right 3rd try.
         // Subquestion 2 was right at 1st try, but last change is at 3rd try.
@@ -227,7 +228,7 @@ class question_test extends \advanced_testcase {
                            3 => array('sub1_answer' => 'Owl', 'sub2_answer' => $right),
                           );
         $finalgrade = $question->compute_final_grade($responses, 1);
-        $this->assertEquals(1 / 3 * (1 - 3 * 0.2) + 2 / 3 * (1 - 2 * 0.2), $finalgrade);
+        $this->assertEqualsWithDelta(1 / 3 * (1 - 3 * 0.2) + 2 / 3 * (1 - 2 * 0.2), $finalgrade, question_testcase::GRADE_DELTA);
 
         // Incomplete responses. Subquestion 1 is right at 4th try and subquestion 2 at 3rd try.
         $responses = array(0 => array('sub1_answer' => 'Dog'),
@@ -236,7 +237,7 @@ class question_test extends \advanced_testcase {
                            3 => array('sub1_answer' => 'Owl', 'sub2_answer' => $right),
                           );
         $finalgrade = $question->compute_final_grade($responses, 1);
-        $this->assertEquals(1 / 3 * (1 - 3 * 0.2) + 2 / 3 * (1 - 2 * 0.2), $finalgrade);
+        $this->assertEqualsWithDelta(1 / 3 * (1 - 3 * 0.2) + 2 / 3 * (1 - 2 * 0.2), $finalgrade, question_testcase::GRADE_DELTA);
     }
 
     /**
@@ -347,6 +348,25 @@ class question_test extends \advanced_testcase {
 
         $this->assertEquals($expected,
                 $newquestion->update_attempt_state_data_for_new_version($oldstep, $question));
+    }
+
+    /**
+     * Test functions work with zero weight.
+     * This is used for testing the MDL-77378 bug.
+     */
+    public function test_zeroweight() {
+        $this->resetAfterTest();
+        /** @var \qtype_multianswer_question $question */
+        $question = \test_question_maker::make_question('multianswer', 'zeroweight');
+        $question->start_attempt(new question_attempt_step(), 1);
+
+        $this->assertEquals([null, question_state::$gradedright], $question->grade_response(
+            ['sub1_answer' => 'Something']));
+        $this->assertEquals([null, question_state::$gradedwrong], $question->grade_response(
+            ['sub1_answer' => 'Input box']));
+
+        $this->assertEquals(1, $question->get_max_fraction());
+        $this->assertEquals(0, $question->get_min_fraction());
     }
 
 }

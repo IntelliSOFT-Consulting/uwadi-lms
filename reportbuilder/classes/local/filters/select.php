@@ -84,7 +84,8 @@ class select extends base {
         $elements['value'] = $mform->createElement($element, $this->name . '_value',
             get_string('filterfieldvalue', 'core_reportbuilder', $this->get_header()), $options);
 
-        $mform->addElement('group', $this->name . '_group', '', $elements, '', false);
+        $mform->addGroup($elements, $this->name . '_group', $this->get_header(), '', false)
+            ->setHiddenLabel(true);
 
         $mform->hideIf($this->name . '_value', $this->name . '_operator', 'eq', self::ANY_VALUE);
     }
@@ -136,5 +137,17 @@ class select extends base {
      */
     private function validate_filter_values(?int $operator, $value): bool {
         return !($operator === null || $value === '');
+    }
+
+    /**
+     * Return sample filter values
+     *
+     * @return array
+     */
+    public function get_sample_values(): array {
+        return [
+            "{$this->name}_operator" => self::EQUAL_TO,
+            "{$this->name}_value" => 1,
+        ];
     }
 }

@@ -1250,11 +1250,9 @@ class moodle_content_writer_test extends advanced_testcase {
 
         if (null === $subcontext) {
             $rcm = $rc->getMethod('get_context_path');
-            $rcm->setAccessible(true);
             $path = $rcm->invoke($writer);
         } else {
             $rcm = $rc->getMethod('get_path');
-            $rcm->setAccessible(true);
             $path = $rcm->invoke($writer, $subcontext, $name);
         }
 
@@ -1292,6 +1290,18 @@ class moodle_content_writer_test extends advanced_testcase {
      */
     public function rewrite_pluginfile_urls_provider() {
         return [
+            'nullcontent' => [
+                'intro',
+                0,
+                null,
+                '',
+            ],
+            'emptycontent' => [
+                'intro',
+                0,
+                '',
+                '',
+            ],
             'zeroitemid' => [
                 'intro',
                 0,

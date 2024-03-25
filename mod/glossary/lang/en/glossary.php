@@ -89,9 +89,8 @@ $string['comments'] = 'Comments';
 $string['commentson'] = 'Comments on';
 $string['commentupdated'] = 'The comment has been updated.';
 $string['completiondetail:entries'] = 'Make entries: {$a}';
-$string['completionentries'] = 'Student must create entries:';
+$string['completionentries'] = 'Add entries';
 $string['completionentriesdesc'] = 'Student must create at least {$a} entry/entries';
-$string['completionentriesgroup'] = 'Require entries';
 $string['concept'] = 'Concept';
 $string['concepts'] = 'Concepts';
 $string['configenablerssfeeds'] = 'This switch will enable the possibility of RSS feeds for all glossaries.  You will still need to turn feeds on manually in the settings for each glossary.';
@@ -166,6 +165,7 @@ $string['errconceptalreadyexists'] = 'This concept already exists. No duplicates
 $string['errdeltimeexpired'] = 'You can\'t delete this. Time expired!';
 $string['erredittimeexpired'] = 'The editing time for this entry has expired.';
 $string['errorparsingxml'] = 'Errors occurred while parsing the file. Make sure it is valid XML syntax.';
+$string['errreservedkeywords'] = 'One or more keywords contain a special character which cannot be used.';
 $string['eventcategorycreated'] = 'Category has been created';
 $string['eventcategorydeleted'] = 'Category has been deleted';
 $string['eventcategoryupdated'] = 'Category has been updated';
@@ -279,6 +279,7 @@ $string['page-mod-glossary-x'] = 'Any glossary module page';
 $string['page-mod-glossary-edit'] = 'Glossary add/edit entry page';
 $string['page-mod-glossary-view'] = 'View glossary edit page';
 $string['pendingapproval'] = 'Pending approval';
+$string['pendingapprovalcount'] = 'Pending approval ({$a})';
 $string['pluginadministration'] = 'Glossary administration';
 $string['pluginname'] = 'Glossary';
 $string['popupformat'] = 'Popup format';
@@ -338,5 +339,5 @@ $string['withoutauthor'] = 'Concepts without author';
 $string['writtenby'] = 'by';
 $string['youarenottheauthor'] = 'You are not the author of this comment, so you are not allowed to edit it.';
 
-// Deprecated since 4.0.
-$string['waitingapproval'] = 'Waiting approval';
+// Deprecated since 4.3.
+$string['completionentriesgroup'] = 'Require entries';

@@ -513,6 +513,8 @@ class category_test extends \advanced_testcase {
     }
 
     public function test_get_search_courses() {
+        global $DB;
+
         $cat1 = core_course_category::create(array('name' => 'Cat1'));
         $cat2 = core_course_category::create(array('name' => 'Cat2', 'parent' => $cat1->id));
         $c1 = $this->getDataGenerator()->create_course(array('category' => $cat1->id, 'fullname' => 'Test 3', 'summary' => ' ', 'idnumber' => 'ID3'));
@@ -578,7 +580,8 @@ class category_test extends \advanced_testcase {
         $this->assertEquals(array($c3->id, $c6->id), array_keys($res));
         $this->assertEquals(2, core_course_category::search_courses_count(array('search' => 'Математика'), array()));
 
-        $this->setUser($this->getDataGenerator()->create_user());
+        $user = $this->getDataGenerator()->create_user();
+        $this->setUser($user);
 
         // Add necessary capabilities.
         $this->assign_capability('moodle/course:create', CAP_ALLOW, \context_coursecat::instance($cat2->id));
@@ -587,6 +590,36 @@ class category_test extends \advanced_testcase {
         $res = core_course_category::search_courses(array('search' => 'test'), array(), $reqcaps);
         $this->assertEquals(array($c8->id, $c5->id), array_keys($res));
         $this->assertEquals(2, core_course_category::search_courses_count(array('search' => 'test'), array(), $reqcaps));
+
+        // We should get no courses here as user is not enrolled to any courses.
+        $res = core_course_category::search_courses([
+            'search' => '',
+            'limittoenrolled' => 1,
+        ]);
+        $this->assertEquals([], $res);
+        $this->assertEquals(0, core_course_category::search_courses_count([
+            'search' => '',
+            'limittoenrolled' => 1,
+        ]));
+
+        $manual = enrol_get_plugin('manual');
+        $teacherrole = $DB->get_record('role', ['shortname' => 'editingteacher']);
+        $enrol = $DB->get_record('enrol', ['courseid' => $c5->id, 'enrol' => 'manual'], '*', MUST_EXIST);
+        $manual->enrol_user($enrol, $user->id, $teacherrole->id);
+
+        // Avoid using the cached values from previous method call.
+        \cache::make('core', 'coursecat')->purge();
+
+        // As the user is now enrolled, we should get this one course.
+        $res = core_course_category::search_courses([
+            'search' => '',
+            'limittoenrolled' => 1,
+        ]);
+        $this->assertEquals([$c5->id], array_keys($res));
+        $this->assertEquals(1, core_course_category::search_courses_count([
+            'search' => '',
+            'limittoenrolled' => 1,
+        ]));
     }
 
     public function test_course_contacts() {
@@ -1343,5 +1376,48 @@ class category_test extends \advanced_testcase {
                 false,
             ],
         ];
+    }
+
+    /**
+     * This test ensures that the filter context list is populated by the correct filter contexts from make_category_list.
+     *
+     * @coversNothing
+     */
+    public function test_make_category_list_context() {
+        global $DB;
+        // Ensure that the category list is empty.
+        $DB->delete_records('course_categories');
+        set_config('perfdebug', 15);
+
+        // Create a few categories to populate the context cache.
+        $this->getDataGenerator()->create_category(['name' => 'cat1']);
+        $this->getDataGenerator()->create_category(['name' => 'cat2']);
+        $this->getDataGenerator()->create_category(['name' => 'cat3']);
+        $filtermanager = \filter_manager::instance();
+
+        // Configure a filter to apply to all content and headings.
+        filter_set_global_state('multilang', TEXTFILTER_ON);
+        filter_set_applies_to_strings('multilang', true);
+
+        $perf = $filtermanager->get_performance_summary();
+        $this->assertEquals(0, $perf[0]['contextswithfilters']);
+
+        // Now fill the cache with the category strings.
+        \core_course_category::make_categories_list();
+        // 3 Categories + system context.
+        $perf = $filtermanager->get_performance_summary();
+        $this->assertEquals(3, $perf[0]['contextswithfilters']);
+        $filtermanager->reset_caches();
+        // We need to refresh the instance, resetting caches unloads the singleton.
+        $filtermanager = \filter_manager::instance();
+        \cache_helper::purge_by_definition('core', 'coursecat');
+
+        // Now flip the bit on the filter context.
+        set_config('filternavigationwithsystemcontext', 1);
+
+        // Repeat the check. Only context should be system context.
+        \core_course_category::make_categories_list();
+        $perf = $filtermanager->get_performance_summary();
+        $this->assertEquals(1, $perf[0]['contextswithfilters']);
     }
 }

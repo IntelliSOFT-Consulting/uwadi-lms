@@ -14,6 +14,10 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
+namespace core;
+
+use environment_results;
+
 /**
  * Moodle environment test.
  *
@@ -22,14 +26,7 @@
  * @copyright  2013 Petr Skoda {@link http://skodak.org}
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-
-defined('MOODLE_INTERNAL') || die();
-
-
-/**
- * Do standard environment.xml tests.
- */
-class core_environment_testcase extends advanced_testcase {
+class environment_test extends \advanced_testcase {
 
     /**
      * Test the environment check status.
@@ -87,6 +84,10 @@ class core_environment_testcase extends advanced_testcase {
             if ($result->info === 'php not 64 bits' && PHP_INT_SIZE == 4) {
                 // If we're on a 32-bit system, skip 64-bit check. 32-bit PHP has PHP_INT_SIZE set to 4.
                 $this->markTestSkipped('64-bit check is not necessary for unit testing.');
+            }
+            if ($result->info === 'oracle_database_usage') {
+                // If we're on a system that uses the Oracle database, skip the Oracle check.
+                $this->markTestSkipped('Oracle database check is not necessary for unit testing.');
             }
         }
         $info = "{$result->part}:{$result->info}";

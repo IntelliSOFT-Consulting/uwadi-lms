@@ -299,7 +299,8 @@ function core_myprofile_navigation(core_user\output\myprofile\tree $tree, $user,
                 $groupstr = '';
                 foreach ($usergroups as $group) {
                     if ($course->groupmode == SEPARATEGROUPS and !$accessallgroups and $user->id != $USER->id) {
-                        if (!groups_is_member($group->id, $user->id)) {
+                        // In separate groups mode, I only have to see the groups shared between both users.
+                        if (!groups_is_member($group->id, $USER->id)) {
                             continue;
                         }
                     }
@@ -332,7 +333,7 @@ function core_myprofile_navigation(core_user\output\myprofile\tree $tree, $user,
     $categories = profile_get_user_fields_with_data_by_category($user->id);
     foreach ($categories as $categoryid => $fields) {
         foreach ($fields as $formfield) {
-            if ($formfield->is_visible() and !$formfield->is_empty()) {
+            if ($formfield->show_field_content()) {
                 $node = new core_user\output\myprofile\node('contact', 'custom_field_' . $formfield->field->shortname,
                     format_string($formfield->field->name), null, null, $formfield->display_data());
                 $tree->add_node($node);

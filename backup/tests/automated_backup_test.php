@@ -30,7 +30,6 @@ defined('MOODLE_INTERNAL') || die();
 
 global $CFG;
 require_once($CFG->dirroot . '/backup/util/helper/backup_cron_helper.class.php');
-require_once($CFG->libdir.'/cronlib.php');
 require_once($CFG->libdir . '/completionlib.php');
 
 /**
@@ -117,11 +116,9 @@ class automated_backup_test extends \advanced_testcase {
         $classobject = $this->backupcronautomatedhelper->return_this();
 
         $method = new \ReflectionMethod('\backup_cron_automated_helper', 'get_courses');
-        $method->setAccessible(true); // Allow accessing of private method.
         $courses = $method->invoke($classobject);
 
         $method = new \ReflectionMethod('\backup_cron_automated_helper', 'check_and_push_automated_backups');
-        $method->setAccessible(true); // Allow accessing of private method.
         $emailpending = $method->invokeArgs($classobject, [$courses, $admin]);
 
         $this->expectOutputRegex('/Skipping course id ' . $this->course->id . ': Not scheduled for backup until/');
@@ -146,7 +143,6 @@ class automated_backup_test extends \advanced_testcase {
         $classobject = $this->backupcronautomatedhelper->return_this();
 
         $method = new \ReflectionMethod('\backup_cron_automated_helper', 'get_courses');
-        $method->setAccessible(true); // Allow accessing of private method.
         $courses = $method->invoke($classobject);
 
         // Create this backup course.
@@ -162,7 +158,6 @@ class automated_backup_test extends \advanced_testcase {
         $DB->update_record('backup_courses', $backupcourse);
 
         $method = new \ReflectionMethod('\backup_cron_automated_helper', 'check_and_push_automated_backups');
-        $method->setAccessible(true); // Allow accessing of private method.
         $emailpending = $method->invokeArgs($classobject, [$courses, $admin]);
         $this->assertTrue($emailpending);
 
@@ -205,7 +200,6 @@ class automated_backup_test extends \advanced_testcase {
         $nextstarttime = backup_cron_automated_helper::calculate_next_automated_backup(null, time());
 
         $method = new \ReflectionMethod('\backup_cron_automated_helper', 'should_skip_course_backup');
-        $method->setAccessible(true); // Allow accessing of private method.
         $skipped = $method->invokeArgs($classobject, [$backupcourse, $course, $nextstarttime]);
 
         $this->assertTrue($skipped);
@@ -240,7 +234,6 @@ class automated_backup_test extends \advanced_testcase {
         $nextstarttime = backup_cron_automated_helper::calculate_next_automated_backup(null, time());
 
         $method = new \ReflectionMethod('\backup_cron_automated_helper', 'should_skip_course_backup');
-        $method->setAccessible(true); // Allow accessing of private method.
         $skipped = $method->invokeArgs($classobject, [$backupcourse, $course, $nextstarttime]);
 
         $this->assertTrue($skipped);
@@ -275,7 +268,6 @@ class automated_backup_test extends \advanced_testcase {
         $nextstarttime = backup_cron_automated_helper::calculate_next_automated_backup(null, time());
 
         $method = new \ReflectionMethod('\backup_cron_automated_helper', 'should_skip_course_backup');
-        $method->setAccessible(true); // Allow accessing of private method.
         $skipped = $method->invokeArgs($classobject, [$backupcourse, $course, $nextstarttime]);
 
         $this->assertTrue($skipped);
@@ -299,7 +291,6 @@ class automated_backup_test extends \advanced_testcase {
 
         // Create a backup task.
         $method = new \ReflectionMethod('\backup_cron_automated_helper', 'push_course_backup_adhoc_task');
-        $method->setAccessible(true); // Allow accessing of private method.
         $method->invokeArgs($classobject, [$backupcourse, $admin]);
 
         // Delete course for this test.
@@ -332,7 +323,6 @@ class automated_backup_test extends \advanced_testcase {
 
         // Create a backup task.
         $method = new \ReflectionMethod('\backup_cron_automated_helper', 'push_course_backup_adhoc_task');
-        $method->setAccessible(true); // Allow accessing of private method.
         $method->invokeArgs($classobject, [$backupcourse, $admin]);
 
         // Delete backup course for this test.

@@ -480,6 +480,11 @@ abstract class data_loading_method_test_base extends advanced_testcase {
 
 abstract class question_testcase extends advanced_testcase {
 
+    /**
+     * Tolerance accepted in some unit tests when float operations are involved.
+     */
+    const GRADE_DELTA = 0.00000005;
+
     public function assert($expectation, $compare, $notused = '') {
 
         if (get_class($expectation) === 'question_pattern_expectation') {
@@ -1224,7 +1229,7 @@ abstract class qbehaviour_walkthrough_test_base extends question_testcase {
         } else if ($enabled === false) {
             $expectedattributes['disabled'] = 'disabled';
         }
-        return new question_contains_tag_with_attributes('input', $expectedattributes, $forbiddenattributes);
+        return new question_contains_tag_with_attributes('button', $expectedattributes, $forbiddenattributes);
     }
 
     /**
@@ -1360,10 +1365,12 @@ class question_test_recordset extends moodle_recordset {
         $this->close();
     }
 
+    #[\ReturnTypeWillChange]
     public function current() {
         return (object) current($this->records);
     }
 
+    #[\ReturnTypeWillChange]
     public function key() {
         if (is_null(key($this->records))) {
             return false;
@@ -1372,11 +1379,11 @@ class question_test_recordset extends moodle_recordset {
         return reset($current);
     }
 
-    public function next() {
+    public function next(): void {
         next($this->records);
     }
 
-    public function valid() {
+    public function valid(): bool {
         return !is_null(key($this->records));
     }
 
@@ -1386,20 +1393,33 @@ class question_test_recordset extends moodle_recordset {
 }
 
 /**
- * Helper class for tests that help to test core_question_renderer.
+ * Provide utility function for random question test
  *
- * @copyright  2018 Huong Nguyen <huongnv13@gmail.com>
+ * @package   core_question
+ * @author     Nathan Nguyen <nathannguyen@catalyst-au.net>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class testable_core_question_renderer extends core_question_renderer {
-
+class question_filter_test_helper {
     /**
-     * Test the private number function.
+     * Create filters base on provided values
      *
-     * @param null|string $number
-     * @return HTML
+     * @param array $categoryids question category filter
+     * @param bool $recursive subcategories filter
+     * @param array $qtagids tags filter
+     * @return array
      */
-    public function number($number) {
-        return parent::number($number);
+    public static function create_filters(array $categoryids, bool $recursive = false, array $qtagids = []): array {
+        $filters = [
+            'category' => [
+                'jointype' => \qbank_managecategories\category_condition::JOINTYPE_DEFAULT,
+                'values' => $categoryids,
+                'filteroptions' => ['includesubcategories' => $recursive],
+            ],
+            'qtagids' => [
+                'jointype' => \qbank_tagquestion\tag_condition::JOINTYPE_DEFAULT,
+                'values' => $qtagids,
+            ],
+        ];
+        return $filters;
     }
 }

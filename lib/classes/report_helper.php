@@ -25,7 +25,6 @@
 
 namespace core;
 use moodle_url;
-use url_select;
 
 /**
  * A helper class with static methods to help report plugins
@@ -41,7 +40,7 @@ class report_helper {
      * @param string $pluginname The report plugin where the header is modified
      * @return void
      */
-    public static function print_report_selector(string $pluginname):void {
+    public static function print_report_selector(string $pluginname): void {
         global $OUTPUT, $PAGE;
 
         if ($reportnode = $PAGE->settingsnav->find('coursereports', \navigation_node::TYPE_CONTAINER)) {
@@ -75,12 +74,20 @@ class report_helper {
                 }
 
             }
-
-            $select = new url_select($menuarray, $activeurl, null, 'choosecoursereport');
-            $select->set_label(get_string('reporttype'), ['class' => 'accesshide']);
-            echo \html_writer::tag('div', $OUTPUT->render($select), ['class' => 'tertiary-navigation']);
+            $selectmenu = new \core\output\select_menu('reporttype', $menuarray, $activeurl);
+            $selectmenu->set_label(get_string('reporttype'), ['class' => 'sr-only']);
+            $options = \html_writer::tag(
+                'div',
+                $OUTPUT->render_from_template('core/tertiary_navigation_selector', $selectmenu->export_for_template($OUTPUT)),
+                ['class' => 'row pb-3']
+            );
+            echo \html_writer::tag(
+                'div',
+                $options,
+                ['class' => 'tertiary-navigation full-width-bottom-border ml-0', 'id' => 'tertiary-navigation']);
+        } else {
+            echo $OUTPUT->heading($pluginname, 2, 'mb-3');
         }
-        echo $OUTPUT->heading($pluginname, 2, 'mb-3');
     }
 
     /**
@@ -91,7 +98,7 @@ class report_helper {
      * @param moodle_url $url The moodle url
      * @return void
      */
-    public static function save_selected_report(int $id, moodle_url $url):void {
+    public static function save_selected_report(int $id, moodle_url $url): void {
         global $USER;
 
         debugging('save_selected_report() has been deprecated because it is no longer used and will be '.

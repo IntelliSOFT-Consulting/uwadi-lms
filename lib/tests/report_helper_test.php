@@ -37,7 +37,7 @@ class report_helper_test extends \advanced_testcase {
      *
      * @return array
      */
-    public function data_selected_report():array {
+    public function data_selected_report(): array {
         return [
             ['course_url_id' => [
                 ['url' => '/test', 'id' => 1],
@@ -56,7 +56,7 @@ class report_helper_test extends \advanced_testcase {
      * @dataProvider data_selected_report
      * @param array $courseurlid The array has both course url and course id
      */
-    public function test_save_selected_report(array $courseurlid):void {
+    public function test_save_selected_report(array $courseurlid): void {
         global $USER;
 
         $url1 = new moodle_url($courseurlid[0]['url']);
@@ -74,43 +74,5 @@ class report_helper_test extends \advanced_testcase {
             'longer used and will be removed in future versions of Moodle');
 
         $this->assertEquals($USER->course_last_report[$courseid2], $url2);
-    }
-
-    /**
-     * Testing the report selector dropdown shown.
-     *
-     * Verify that the dropdowns have the pages to be displayed.
-     *
-     * @return void
-     */
-    public function test_print_report_selector():void {
-        global $PAGE;
-
-        $this->resetAfterTest();
-
-        $user = $this->getDataGenerator()->create_user();
-
-        $PAGE->set_url('/');
-
-        $course = $this->getDataGenerator()->create_course();
-        $PAGE->set_course($course);
-
-        $this->getDataGenerator()->enrol_user($user->id, $course->id, 'teacher');
-
-        $this->setUser($user);
-
-        ob_start();
-        report_helper::print_report_selector('Logs');
-        $output = $this->getActualOutput();
-        ob_end_clean();
-
-        $log = '<option value="/report/log/index.php?id=' . $course->id .'" selected>Logs</option>';
-        $competency = '<option value="/report/competency/index.php?id=' . $course->id . '" >Competency breakdown</option>';
-        $loglive = '<option value="/report/loglive/index.php?id=' . $course->id . '" >Live logs</option>';
-        $participation = '<option value="/report/participation/index.php?id=' . $course->id . '" >Course participation</option>';
-        $this->assertStringContainsString($log, $output);
-        $this->assertStringContainsString($competency, $output);
-        $this->assertStringContainsString($loglive, $output);
-        $this->assertStringContainsString($participation, $output);
     }
 }

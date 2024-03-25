@@ -25,12 +25,6 @@
  * @copyright  2011 David Mudrak <david@moodle.com>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-
-defined('MOODLE_INTERNAL') || die();
-
-/**
- * Singleton class providing general plugins management functionality.
- */
 class core_plugin_manager {
 
     /** the plugin is shipped with standard Moodle distribution */
@@ -112,7 +106,7 @@ class core_plugin_manager {
     /**
      * Factory method for this class
      *
-     * @return core_plugin_manager the singleton instance
+     * @return static the singleton instance
      */
     public static function instance() {
         if (is_null(static::$singletoninstance)) {
@@ -597,19 +591,12 @@ class core_plugin_manager {
      * @return string
      */
     public function plugintype_name($type) {
-
         if (get_string_manager()->string_exists('type_' . $type, 'core_plugin')) {
             // For most plugin types, their names are defined in core_plugin lang file.
             return get_string('type_' . $type, 'core_plugin');
-
         } else if ($parent = $this->get_parent_of_subplugin($type)) {
             // If this is a subplugin, try to ask the parent plugin for the name.
-            if (get_string_manager()->string_exists('subplugintype_' . $type, $parent)) {
-                return $this->plugin_name($parent) . ' / ' . get_string('subplugintype_' . $type, $parent);
-            } else {
-                return $this->plugin_name($parent) . ' / ' . $type;
-            }
-
+            return $this->plugin_name($parent) . ' / ' . get_string('subplugintype_' . $type, $parent);
         } else {
             return $type;
         }
@@ -626,19 +613,12 @@ class core_plugin_manager {
      * @return string
      */
     public function plugintype_name_plural($type) {
-
         if (get_string_manager()->string_exists('type_' . $type . '_plural', 'core_plugin')) {
             // For most plugin types, their names are defined in core_plugin lang file.
             return get_string('type_' . $type . '_plural', 'core_plugin');
-
         } else if ($parent = $this->get_parent_of_subplugin($type)) {
             // If this is a subplugin, try to ask the parent plugin for the name.
-            if (get_string_manager()->string_exists('subplugintype_' . $type . '_plural', $parent)) {
-                return $this->plugin_name($parent) . ' / ' . get_string('subplugintype_' . $type . '_plural', $parent);
-            } else {
-                return $this->plugin_name($parent) . ' / ' . $type;
-            }
-
+            return $this->plugin_name($parent) . ' / ' . get_string('subplugintype_' . $type . '_plural', $parent);
         } else {
             return $type;
         }
@@ -929,7 +909,7 @@ class core_plugin_manager {
      * @param int $branch the moodle branch to check support for
      * @return string
      */
-    public function check_explicitly_supported($plugin, $branch) : string {
+    public function check_explicitly_supported($plugin, $branch): string {
         // Check for correctly formed supported.
         if (isset($plugin->pluginsupported)) {
             // Broken apart for readability.
@@ -1556,7 +1536,7 @@ class core_plugin_manager {
 
         $provider = \core\update\checker::instance();
 
-        if (!$provider->enabled() or during_initial_install()) {
+        if (!$provider->enabled() || $component === '' || during_initial_install()) {
             return null;
         }
 
@@ -1651,7 +1631,7 @@ class core_plugin_manager {
         }
 
         // To be able to remove the plugin folder, its parent must be writable, too.
-        if (!is_writable(dirname($pluginfo->rootdir))) {
+        if (!isset($pluginfo->rootdir) || !is_writable(dirname($pluginfo->rootdir))) {
             return false;
         }
 
@@ -1726,26 +1706,33 @@ class core_plugin_manager {
         // branch, listed should be no plugins that were removed at 1.9.x - 2.1.x versions as
         // Moodle 2.3 supports upgrades from 2.2.x only.
         $plugins = array(
-            'qformat' => array('blackboard', 'learnwise', 'examview'),
+            'assignment' => array('offline', 'online', 'upload', 'uploadsingle'),
             'auth' => array('radius', 'fc', 'nntp', 'pam', 'pop3', 'imap'),
             'block' => array('course_overview', 'messages', 'community', 'participants', 'quiz_results'),
-            'cachestore' => array('memcache'),
+            'cachestore' => array('memcache', 'memcached', 'mongodb'),
+            'editor' => array('tinymce'),
             'enrol' => array('authorize'),
             'filter' => array('censor'),
+            'h5plib' => array('v124'),
             'media' => array('swf'),
             'portfolio' => array('picasa', 'boxnet'),
-            'qformat' => array('webct'),
+            'qformat' => array('blackboard', 'learnwise', 'examview', 'webct'),
             'message' => array('jabber'),
+            'mod' => array('assignment'),
             'quizaccess' => array('safebrowser'),
             'report' => array('search'),
             'repository' => array('alfresco', 'picasa', 'skydrive', 'boxnet'),
-            'tinymce' => array('dragmath'),
+            'tinymce' => array('dragmath', 'ctrlhelp', 'managefiles', 'moodleemoticon', 'moodleimage',
+                'moodlemedia', 'moodlenolink', 'pdw', 'spellchecker', 'wrap'
+            ),
+
             'tool' => array('bloglevelupgrade', 'qeupgradehelper', 'timezoneimport', 'assignmentupgrade', 'health'),
             'theme' => array('bootstrapbase', 'clean', 'more', 'afterburner', 'anomaly', 'arialist', 'base',
                 'binarius', 'boxxie', 'brick', 'canvas', 'formal_white', 'formfactor', 'fusion', 'leatherbound',
                 'magazine', 'mymobile', 'nimble', 'nonzero', 'overlay', 'serenity', 'sky_high', 'splash',
                 'standard', 'standardold'),
-            'webservice' => array('amf'),
+            'logstore' => ['legacy'],
+            'webservice' => array('amf', 'xmlrpc'),
         );
 
         if (!isset($plugins[$type])) {
@@ -1775,10 +1762,6 @@ class core_plugin_manager {
                 'link', 'managefiles', 'media', 'noautolink', 'orderedlist',
                 'recordrtc', 'rtl', 'strike', 'subscript', 'superscript', 'table',
                 'title', 'underline', 'undo', 'unorderedlist', 'h5p', 'emojipicker',
-            ),
-
-            'assignment' => array(
-                'offline', 'online', 'upload', 'uploadsingle'
             ),
 
             'assignsubmission' => array(
@@ -1821,12 +1804,17 @@ class core_plugin_manager {
             ),
 
             'cachestore' => array(
-                'file', 'memcached', 'mongodb', 'session', 'static', 'apcu', 'redis'
+                'file', 'session', 'static', 'apcu', 'redis'
             ),
 
             'calendartype' => array(
                 'gregorian'
             ),
+
+            'communication' => [
+                'customlink',
+                'matrix',
+            ],
 
             'contenttype' => array(
                 'h5p'
@@ -1850,7 +1838,10 @@ class core_plugin_manager {
             ),
 
             'datapreset' => array(
-                'imagegallery'
+                'imagegallery',
+                'journal',
+                'proposals',
+                'resources',
             ),
 
             'fileconverter' => array(
@@ -1858,7 +1849,7 @@ class core_plugin_manager {
             ),
 
             'editor' => array(
-                'atto', 'textarea', 'tinymce'
+                'atto', 'textarea', 'tiny',
             ),
 
             'enrol' => array(
@@ -1867,10 +1858,15 @@ class core_plugin_manager {
                 'paypal', 'self', 'fee',
             ),
 
+            'factor' => [
+                'admin', 'auth', 'capability', 'cohort',  'email', 'grace', 'iprange', 'nosetup', 'role',
+                'token', 'totp', 'webauthn', 'sms',
+            ],
+
             'filter' => array(
                 'activitynames', 'algebra', 'emailprotect',
                 'emoticon', 'displayh5p', 'mathjaxloader', 'mediaplugin', 'multilang', 'tex', 'tidy',
-                'urltolink', 'data', 'glossary'
+                'urltolink', 'data', 'glossary', 'codehighlighter'
             ),
 
             'format' => array(
@@ -1890,7 +1886,7 @@ class core_plugin_manager {
             ),
 
             'gradereport' => array(
-                'grader', 'history', 'outcomes', 'overview', 'user', 'singleview'
+                'grader', 'history', 'outcomes', 'overview', 'user', 'singleview', 'summary'
             ),
 
             'gradingform' => array(
@@ -1898,14 +1894,14 @@ class core_plugin_manager {
             ),
 
             'h5plib' => array(
-                'v124'
+                'v126',
             ),
 
             'local' => array(
             ),
 
             'logstore' => array(
-                'database', 'legacy', 'standard',
+                'database', 'standard',
             ),
 
             'ltiservice' => array(
@@ -1929,7 +1925,7 @@ class core_plugin_manager {
             ),
 
             'mod' => array(
-                'assign', 'assignment', 'bigbluebuttonbn', 'book', 'chat', 'choice', 'data', 'feedback', 'folder',
+                'assign', 'bigbluebuttonbn', 'book', 'chat', 'choice', 'data', 'feedback', 'folder',
                 'forum', 'glossary', 'h5pactivity', 'imscp', 'label', 'lesson', 'lti', 'page',
                 'quiz', 'resource', 'scorm', 'survey', 'url', 'wiki', 'workshop'
             ),
@@ -2004,7 +2000,8 @@ class core_plugin_manager {
             'report' => array(
                 'backups', 'competency', 'completion', 'configlog', 'courseoverview', 'eventlist',
                 'infectedfiles', 'insights', 'log', 'loglive', 'outline', 'participation', 'progress',
-                'questioninstances', 'security', 'stats', 'status', 'performance', 'usersessions'
+                'questioninstances', 'security', 'stats', 'status', 'performance', 'usersessions',
+                'themeusage',
             ),
 
             'repository' => array(
@@ -2025,10 +2022,18 @@ class core_plugin_manager {
                 'objectives'
             ),
 
-            'tinymce' => array(
-                'ctrlhelp', 'managefiles', 'moodleemoticon', 'moodleimage',
-                'moodlemedia', 'moodlenolink', 'pdw', 'spellchecker', 'wrap'
-            ),
+            'tiny' => [
+                'accessibilitychecker',
+                'autosave',
+                'equation',
+                'h5p',
+                'media',
+                'recordrtc',
+                'link',
+                'html',
+                'noautolink',
+                'premium',
+            ],
 
             'theme' => array(
                 'boost', 'classic'
@@ -2040,11 +2045,11 @@ class core_plugin_manager {
                 'installaddon', 'langimport', 'licensemanager', 'log', 'lp', 'lpimportcsv', 'lpmigrate', 'messageinbound',
                 'mobile', 'moodlenet', 'multilangupgrade', 'monitor', 'oauth2', 'phpunit', 'policy', 'profiling', 'recyclebin',
                 'replace', 'spamcleaner', 'task', 'templatelibrary', 'uploadcourse', 'uploaduser', 'unsuproles',
-                'usertours', 'xmldb'
+                'usertours', 'xmldb', 'mfa'
             ),
 
             'webservice' => array(
-                'rest', 'soap', 'xmlrpc'
+                'rest', 'soap'
             ),
 
             'workshopallocation' => array(

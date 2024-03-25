@@ -63,7 +63,6 @@ class lib_test extends \advanced_testcase {
 
     public function setUp(): void {
         $this->user = $this->getDataGenerator()->create_user();
-        $this->user2 = $this->getDataGenerator()->create_user();
         $this->course = $this->getDataGenerator()->create_course();
         $this->tree = new \core_user\output\myprofile\tree();
         $this->coursecontext = \context_course::instance($this->course->id);
@@ -79,7 +78,6 @@ class lib_test extends \advanced_testcase {
         $allstores = \core_component::get_plugin_list_with_class('logstore', 'log\store');
 
         $supportedstores = array(
-            'logstore_legacy' => '\logstore_legacy\log\store',
             'logstore_standard' => '\logstore_standard\log\store'
         );
 
@@ -102,7 +100,6 @@ class lib_test extends \advanced_testcase {
         report_outline_myprofile_navigation($this->tree, $this->user, $iscurrentuser, $this->course);
         $reflector = new \ReflectionObject($this->tree);
         $nodes = $reflector->getProperty('nodes');
-        $nodes->setAccessible(true);
         $this->assertArrayHasKey('outline', $nodes->getValue($this->tree));
         $this->assertArrayHasKey('complete', $nodes->getValue($this->tree));
     }
@@ -117,7 +114,6 @@ class lib_test extends \advanced_testcase {
         report_outline_myprofile_navigation($this->tree, $this->user, $iscurrentuser, $this->course);
         $reflector = new \ReflectionObject($this->tree);
         $nodes = $reflector->getProperty('nodes');
-        $nodes->setAccessible(true);
         $this->assertArrayNotHasKey('outline', $nodes->getValue($this->tree));
         $this->assertArrayNotHasKey('complete', $nodes->getValue($this->tree));
     }

@@ -14,18 +14,10 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-/**
- * Check API unit tests
- *
- * @package    core
- * @category   check
- * @copyright  2020 Brendan Heywood <brendan@catalyst-au.net>
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- */
-
-defined('MOODLE_INTERNAL') || die();
+namespace core;
 
 use core\check\result;
+use core\check\security\passwordpolicy;
 
 /**
  * Example unit tests for check API
@@ -34,8 +26,9 @@ use core\check\result;
  * @category   check
  * @copyright  2020 Brendan Heywood <brendan@catalyst-au.net>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @covers     \core\check
  */
-class check_testcase extends advanced_testcase {
+class check_test extends \advanced_testcase {
 
     /**
      * A simple example showing how a check and result object works
@@ -44,21 +37,35 @@ class check_testcase extends advanced_testcase {
      * instead of build time so many checks in real life such as testing
      * an API is connecting aren't viable to unit test.
      */
-    public function test_passwordpolicy() {
+    public function test_passwordpolicy(): void {
         global $CFG;
         $prior = $CFG->passwordpolicy;
 
-        $check = new core\check\security\passwordpolicy();
+        $check = new passwordpolicy();
 
         $CFG->passwordpolicy = false;
         $result = $check->get_result();
-        $this->assertEquals($result->status, result::WARNING);
+        $this->assertEquals($result->get_status(), result::WARNING);
 
         $CFG->passwordpolicy = true;
         $result = $check->get_result();
-        $this->assertEquals($result->status, result::OK);
+        $this->assertEquals($result->get_status(), result::OK);
 
         $CFG->passwordpolicy = $prior;
+    }
+
+    /**
+     * Tests that the component is correctly set.
+     */
+    public function test_get_component(): void {
+        $check = new \tool_task\check\maxfaildelay();
+
+        // If no component is set, it should return the one based off the namespace.
+        $this->assertEquals('tool_task', $check->get_component());
+
+        // However if one is set, it should return that.
+        $check->set_component('test component');
+        $this->assertEquals('test component', $check->get_component());
     }
 }
 

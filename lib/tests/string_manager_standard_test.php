@@ -23,6 +23,10 @@
  * @license     http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
+namespace core;
+
+use core_string_manager_standard;
+
 defined('MOODLE_INTERNAL') || die();
 
 global $CFG;
@@ -31,10 +35,14 @@ require_once($CFG->libdir.'/moodlelib.php');
 /**
  * Tests for the API of the string_manager.
  *
+ * Unit tests for localization support in lib/moodlelib.php
+ *
+ * @package   core
+ * @category  test
  * @copyright 2013 David Mudrak <david@moodle.com>
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class core_string_manager_standard_testcase extends advanced_testcase {
+class string_manager_standard_test extends \advanced_testcase {
 
     public function test_string_manager_instance() {
         $this->resetAfterTest();
@@ -75,13 +83,13 @@ class core_string_manager_standard_testcase extends advanced_testcase {
         $this->assertFalse($stringman->string_deprecated('hidden', 'grades'));
 
         // Check deprecated string, make sure to update once that chosen below is finally removed.
-        $this->assertTrue($stringman->string_deprecated('coursepage', 'core_admin'));
-        $this->assertTrue($stringman->string_exists('coursepage', 'core_admin'));
+        $this->assertTrue($stringman->string_deprecated('selectdevice', 'core_admin'));
+        $this->assertTrue($stringman->string_exists('selectdevice', 'core_admin'));
         $this->assertDebuggingNotCalled();
-        $this->assertEquals('Course page', get_string('coursepage', 'core_admin'));
-        $this->assertDebuggingCalled('String [coursepage,core_admin] is deprecated. '.
+        $this->assertEquals('Select device', get_string('selectdevice', 'core_admin'));
+        $this->assertDebuggingCalled('String [selectdevice,core_admin] is deprecated. '.
             'Either you should no longer be using that string, or the string has been incorrectly deprecated, in which case you should report this as a bug. '.
-            'Please refer to https://docs.moodle.org/dev/String_deprecation');
+            'Please refer to https://moodledev.io/general/projects/api/string-deprecation');
     }
 
     /**
@@ -116,7 +124,7 @@ class core_string_manager_standard_testcase extends advanced_testcase {
         $this->assertEquals($matches[2], clean_param($matches[2], PARAM_COMPONENT),
             "Component name {$string} appearing in one of the lang/en/deprecated.txt files does not have correct syntax");
 
-        list($pluginttype, $pluginname) = core_component::normalize_component($matches[2]);
+        list($pluginttype, $pluginname) = \core_component::normalize_component($matches[2]);
         $normcomponent = $pluginname ? ($pluginttype . '_' . $pluginname) : $pluginttype;
         $this->assertEquals($normcomponent, $matches[2],
             'String "'.$string.'" appearing in one of the lang/en/deprecated.txt files does not have normalised component name');

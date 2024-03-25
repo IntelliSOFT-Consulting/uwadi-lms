@@ -668,6 +668,18 @@ class managers_capability_test extends \advanced_testcase {
         $CFG->maxeditingtime = 200;
         $this->assertTrue($capabilitymanager->can_edit_post($user, $discussion, $post));
 
+        // Can not edit within editing time if $post->mailnow > 0 (selected).
+        $CFG->maxeditingtime = 200;
+        $post = $this->entityfactory->get_post_from_stdClass(
+            (object) array_merge((array) $this->postrecord, ['mailnow' => 1])
+        );
+        $this->assertFalse($capabilitymanager->can_edit_post($user, $discussion, $post));
+
+        // Back to normal - mailnow not selected.
+        $post = $this->entityfactory->get_post_from_stdClass(
+            (object) array_merge((array) $this->postrecord, ['mailnow' => 0])
+        );
+
         // 10 seconds to edit. No longer in editing time.
         $CFG->maxeditingtime = 10;
         $this->assertFalse($capabilitymanager->can_edit_post($user, $discussion, $post));
@@ -768,6 +780,17 @@ class managers_capability_test extends \advanced_testcase {
         $this->give_capability('mod/forum:deleteownpost');
         // 200 second editing time to make sure our post is still within it.
         $CFG->maxeditingtime = 200;
+
+        // Can not delete within editing time if $post->mailnow > 0 (selected).
+        $post = $this->entityfactory->get_post_from_stdClass(
+            (object) array_merge((array) $this->postrecord, ['mailnow' => 1])
+        );
+        $this->assertFalse($capabilitymanager->can_delete_post($user, $discussion, $post));
+
+        // Back to normal - mailnow not selected.
+        $post = $this->entityfactory->get_post_from_stdClass(
+            (object) array_merge((array) $this->postrecord, ['mailnow' => 0])
+        );
 
         // Make the post owned by someone else.
         $post = $this->entityfactory->get_post_from_stdClass(
@@ -1056,8 +1079,9 @@ class managers_capability_test extends \advanced_testcase {
         $discussion = $this->discussion;
         $post = $this->post;
 
+        $postproperties = ['parent' => $post->get_id(), 'userid' => $otheruser->id, 'privatereplyto' => $otheruser->id];
         $privatepost = $this->entityfactory->get_post_from_stdClass(
-            (object) array_merge((array) $this->postrecord, ['parent' => $post->get_id(), 'privatereplyto' => $otheruser->id])
+            (object) array_merge((array) $this->postrecord, $postproperties)
         );
 
         $this->prevent_capability('mod/forum:readprivatereplies');
@@ -1080,23 +1104,41 @@ class managers_capability_test extends \advanced_testcase {
 
         $discussion = $this->discussion;
         $post = $this->post;
-        $privatepost = $this->entityfactory->get_post_from_stdClass(
-            (object) array_merge((array) $this->postrecord, ['parent' => $post->get_id(), 'privatereplyto' => $otheruser->id])
-        );
-        $privateposttome = $this->entityfactory->get_post_from_stdClass(
-            (object) array_merge((array) $this->postrecord, ['parent' => $post->get_id(), 'privatereplyto' => $user->id])
+
+        $postproperties = ['parent' => $post->get_id(), 'userid' => $user->id, 'privatereplyto' => $user->id];
+        $privatepostfrommetome = $this->entityfactory->get_post_from_stdClass(
+            (object) array_merge((array) $this->postrecord, $postproperties)
         );
 
-        // Can always view public replies, and those to me.
+        $postproperties = ['parent' => $post->get_id(), 'userid' => $user->id, 'privatereplyto' => $otheruser->id];
+        $privatepostfrommetoother = $this->entityfactory->get_post_from_stdClass(
+            (object) array_merge((array) $this->postrecord, $postproperties)
+        );
+
+        $postproperties = ['parent' => $post->get_id(), 'userid' => $otheruser->id, 'privatereplyto' => $user->id];
+        $privatepostfromothertome = $this->entityfactory->get_post_from_stdClass(
+            (object) array_merge((array) $this->postrecord, $postproperties)
+        );
+
+        $postproperties = ['parent' => $post->get_id(), 'userid' => $otheruser->id, 'privatereplyto' => $otheruser->id];
+        $privatepostfromothertoother = $this->entityfactory->get_post_from_stdClass(
+            (object) array_merge((array) $this->postrecord, $postproperties)
+        );
+
+        // Can always view public replies, and private replies by me or to me.
         $this->prevent_capability('mod/forum:readprivatereplies');
         $this->assertTrue($capabilitymanager->can_view_post_shell($this->user, $post));
-        $this->assertTrue($capabilitymanager->can_view_post_shell($this->user, $privateposttome));
-        $this->assertFalse($capabilitymanager->can_view_post_shell($this->user, $privatepost));
+        $this->assertTrue($capabilitymanager->can_view_post_shell($this->user, $privatepostfrommetome));
+        $this->assertTrue($capabilitymanager->can_view_post_shell($this->user, $privatepostfrommetoother));
+        $this->assertTrue($capabilitymanager->can_view_post_shell($this->user, $privatepostfromothertome));
+        $this->assertFalse($capabilitymanager->can_view_post_shell($this->user, $privatepostfromothertoother));
 
         $this->give_capability('mod/forum:readprivatereplies');
         $this->assertTrue($capabilitymanager->can_view_post_shell($this->user, $post));
-        $this->assertTrue($capabilitymanager->can_view_post_shell($this->user, $privateposttome));
-        $this->assertTrue($capabilitymanager->can_view_post_shell($this->user, $privatepost));
+        $this->assertTrue($capabilitymanager->can_view_post_shell($this->user, $privatepostfrommetome));
+        $this->assertTrue($capabilitymanager->can_view_post_shell($this->user, $privatepostfrommetoother));
+        $this->assertTrue($capabilitymanager->can_view_post_shell($this->user, $privatepostfromothertome));
+        $this->assertTrue($capabilitymanager->can_view_post_shell($this->user, $privatepostfromothertoother));
     }
 
     /**

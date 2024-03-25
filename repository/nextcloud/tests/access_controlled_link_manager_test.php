@@ -46,6 +46,9 @@ class access_controlled_link_manager_test extends \advanced_testcase {
     /** @var null|\core\oauth2\issuer which belongs to the repository_nextcloud object. */
     public $issuer = null;
 
+    /** @var string system account username. */
+    public $systemaccountusername;
+
     /**
      * SetUp to create an repository instance.
      */
@@ -609,7 +612,6 @@ XML;
     protected function set_private_property($value, $propertyname, $class) {
         $refclient = new \ReflectionClass($class);
         $private = $refclient->getProperty($propertyname);
-        $private->setAccessible(true);
         $private->setValue($class, $value);
         return $private;
     }
@@ -623,7 +625,6 @@ XML;
     protected function get_private_property($propertyname, $class) {
         $refclient = new \ReflectionClass($class);
         $private = $refclient->getProperty($propertyname);
-        $private->setAccessible(true);
         $property = $private->getValue($private);
         return $property;
     }

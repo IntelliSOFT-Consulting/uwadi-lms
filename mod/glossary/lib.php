@@ -1009,8 +1009,8 @@ function glossary_get_entries($glossaryid, $entrylist, $pivot = "") {
 /**
  * @global object
  * @global object
- * @param object $concept
- * @param string $courseid
+ * @param string $concept
+ * @param int $courseid
  * @return array
  */
 function glossary_get_entries_search($concept, $courseid) {
@@ -1289,7 +1289,7 @@ function glossary_print_entry_icons($course, $cm, $glossary, $entry, $mode='',$h
 
             $url = "edit.php?cmid=$cm->id&amp;id=$entry->id&amp;mode=$mode&amp;hook=".urlencode($hook);
             $return .= "<a class='icon' title=\"" . get_string("edit") . "\" href=\"$url\">" .
-                       $OUTPUT->pix_icon('t/edit', get_string('editentrya', 'mod_glossary', $altsuffix)) . '</a>';
+                       $OUTPUT->pix_icon('i/edit', get_string('editentrya', 'mod_glossary', $altsuffix)) . '</a>';
         } elseif ( $importedentry ) {
             $return .= "<font size=\"-1\">" . get_string("exportedentry","glossary") . "</font>";
         }
@@ -1354,9 +1354,11 @@ function glossary_print_entry_icons($course, $cm, $glossary, $entry, $mode='',$h
  * @param object $hook
  * @param bool $printicons
  * @param bool $aliases
+ * @param bool $printseparator Whether to print a thematic break (separator) at the end of the lower section.
  * @return void
  */
-function  glossary_print_entry_lower_section($course, $cm, $glossary, $entry, $mode, $hook, $printicons, $aliases=true) {
+function glossary_print_entry_lower_section($course, $cm, $glossary, $entry, $mode, $hook, $printicons, $aliases = true,
+        $printseparator = true) {
     if ($aliases) {
         $aliases = glossary_print_entry_aliases($course, $cm, $glossary, $entry, $mode, $hook,'html');
     }
@@ -1381,7 +1383,10 @@ function  glossary_print_entry_lower_section($course, $cm, $glossary, $entry, $m
             echo '</td></tr>';
         }
         echo '</table>';
-        echo "<hr>\n";
+
+        if ($printseparator) {
+            echo "<hr>\n";
+        }
     }
 }
 
@@ -2786,7 +2791,7 @@ function glossary_get_post_actions() {
 /**
  * Implementation of the function for printing the form elements that control
  * whether the course reset functionality affects the glossary.
- * @param object $mform form passed by reference
+ * @param MoodleQuickForm $mform form passed by reference
  */
 function glossary_reset_course_form_definition(&$mform) {
     $mform->addElement('header', 'glossaryheader', get_string('modulenameplural', 'glossary'));
@@ -3162,7 +3167,7 @@ function glossary_extend_settings_navigation(settings_navigation $settings, navi
     // Safe guard check - Ideally, there shouldn't be any hidden entries if the glossary has 'defaultapproval'.
     if (has_capability('mod/glossary:approve', $settings->get_page()->cm->context) &&
             (!$glossary->defaultapproval || $hiddenentries)) {
-        $glossarynode->add(get_string('pendingapproval', 'glossary'),
+        $glossarynode->add(get_string('pendingapprovalcount', 'glossary', $hiddenentries),
             new moodle_url('/mod/glossary/view.php', ['id' => $settings->get_page()->cm->id, 'mode' => 'approval']),
             navigation_node::TYPE_CUSTOM, null, 'pendingapproval');
     }

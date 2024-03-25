@@ -18,9 +18,6 @@ declare(strict_types=1);
 
 namespace core_reportbuilder\local\systemreports;
 
-use context_system;
-use core_reportbuilder\local\helpers\audience;
-use core_reportbuilder\local\helpers\database;
 use html_writer;
 use lang_string;
 use moodle_url;
@@ -31,8 +28,10 @@ use core_reportbuilder\manager;
 use core_reportbuilder\system_report;
 use core_reportbuilder\local\entities\user;
 use core_reportbuilder\local\filters\date;
+use core_reportbuilder\local\filters\tags;
 use core_reportbuilder\local\filters\text;
 use core_reportbuilder\local\filters\select;
+use core_reportbuilder\local\helpers\audience;
 use core_reportbuilder\local\helpers\format;
 use core_reportbuilder\local\report\action;
 use core_reportbuilder\local\report\column;
@@ -40,6 +39,7 @@ use core_reportbuilder\local\report\filter;
 use core_reportbuilder\output\report_name_editable;
 use core_reportbuilder\local\models\report;
 use core_reportbuilder\permission;
+use core_tag_tag;
 
 /**
  * Reports list
@@ -69,11 +69,9 @@ class reports_list extends system_report {
         // Select fields required for actions, permission checks, and row class callbacks.
         $this->add_base_fields('rb.id, rb.name, rb.source, rb.type, rb.usercreated, rb.contextid');
 
-        // If user can't view all reports, limit the returned list to those reports they can see.
-        [$where, $params] = $this->filter_by_allowed_reports_sql();
-        if (!empty($where)) {
-            $this->add_base_condition_sql($where, $params);
-        }
+        // Limit the returned list to those reports the current user can access.
+        [$where, $params] = audience::user_reports_list_access_sql('rb');
+        $this->add_base_condition_sql($where, $params);
 
         // Join user entity for "User modified" column.
         $entityuser = new user();
@@ -117,6 +115,8 @@ class reports_list extends system_report {
      * Add columns to report
      */
     protected function add_columns(): void {
+        global $DB;
+
         $tablealias = $this->get_main_table_alias();
 
         // Report name column.
@@ -155,10 +155,41 @@ class reports_list extends system_report {
             ->add_callback(function(string $value, stdClass $row) {
                 if (!$this->report_source_valid($value)) {
                     // Add danger badge if report source is not valid (either it's missing, or has errors).
-                    return html_writer::span(get_string('errorsourceinvalid', 'core_reportbuilder'), 'badge badge-danger');
+                    return html_writer::span(get_string('errorsourceinvalid', 'core_reportbuilder'), 'badge bg-danger text-white');
                 }
 
                 return call_user_func([$value, 'get_name']);
+            })
+        );
+
+        // Tags column. TODO: Reuse tag entity column when MDL-76392 is integrated.
+        $tagfieldconcatsql = $DB->sql_group_concat(
+            field: $DB->sql_concat_join("'|'", ['t.name', 't.rawname']),
+            sort: 't.name',
+        );
+        $this->add_column((new column(
+            'tags',
+            new lang_string('tags'),
+            $this->get_report_entity_name(),
+        ))
+            ->set_type(column::TYPE_TEXT)
+            ->add_field("(
+                SELECT {$tagfieldconcatsql}
+                  FROM {tag_instance} ti
+                  JOIN {tag} t ON t.id = ti.tagid
+                 WHERE ti.component = 'core_reportbuilder' AND ti.itemtype = 'reportbuilder_report'
+                   AND ti.itemid = {$tablealias}.id
+            )", 'tags')
+            ->set_is_sortable(true)
+            ->set_is_available(core_tag_tag::is_enabled('core_reportbuilder', 'reportbuilder_report'))
+            ->add_callback(static function(?string $tags): string {
+                return implode(', ', array_map(static function(string $tag): string {
+                    [$name, $rawname] = explode('|', $tag);
+                    return core_tag_tag::make_display_name((object) [
+                        'name' => $name,
+                        'rawname' => $rawname,
+                    ]);
+                }, preg_split('/, /', (string) $tags, -1, PREG_SPLIT_NO_EMPTY)));
             })
         );
 
@@ -220,6 +251,21 @@ class reports_list extends system_report {
             ->set_options_callback(static function(): array {
                 return manager::get_report_datasources();
             })
+        );
+
+        // Tags filter.
+        $this->add_filter((new filter(
+            tags::class,
+            'tags',
+            new lang_string('tags'),
+            $this->get_report_entity_name(),
+            "{$tablealias}.id",
+        ))
+            ->set_options([
+                'component' => 'core_reportbuilder',
+                'itemtype' => 'reportbuilder_report',
+            ])
+            ->set_is_available(core_tag_tag::is_enabled('core_reportbuilder', 'reportbuilder_report'))
         );
 
         // Time created filter.
@@ -285,7 +331,12 @@ class reports_list extends system_report {
         $this->add_action((new action(
             new moodle_url('#'),
             new pix_icon('t/delete', ''),
-            ['data-action' => 'report-delete', 'data-report-id' => ':id', 'data-report-name' => ':name'],
+            [
+                'data-action' => 'report-delete',
+                'data-report-id' => ':id',
+                'data-report-name' => ':name',
+                'class' => 'text-danger',
+            ],
             false,
             new lang_string('deletereport', 'core_reportbuilder')
         ))
@@ -309,54 +360,5 @@ class reports_list extends system_report {
      */
     private function report_source_valid(string $source): bool {
         return manager::report_source_exists($source, datasource::class) && manager::report_source_available($source);
-    }
-
-    /**
-     * Filters the list of reports to return only the ones the user has access to
-     *
-     * - A user with 'editall' capability will have access to all reports.
-     * - A user with 'edit' capability will have access to:
-     *      - Those reports this user has created.
-     *      - Those reports this user is in audience of.
-     * - A user with 'view' capability will have access to:
-     *      - Those reports this user is in audience of.
-     *
-     * @return array
-     */
-    private function filter_by_allowed_reports_sql(): array {
-        global $DB, $USER;
-
-        // If user can't view all reports, limit the returned list to those reports they can see.
-        if (!has_capability('moodle/reportbuilder:editall', context_system::instance())) {
-            $reports = audience::user_reports_list();
-
-            if (has_capability('moodle/reportbuilder:edit', context_system::instance())) {
-                // User can always see own reports and also those reports user is in audience of.
-                $paramuserid = database::generate_param_name();
-
-                if (empty($reports)) {
-                    return ["rb.usercreated = :{$paramuserid}", [$paramuserid => $USER->id]];
-                }
-
-                $prefix = database::generate_param_name() . '_';
-                [$where, $params] = $DB->get_in_or_equal($reports, SQL_PARAMS_NAMED, $prefix);
-
-                $params = array_merge($params, [$paramuserid => $USER->id]);
-
-                return ["(rb.usercreated = :{$paramuserid} OR rb.id {$where})", $params];
-
-            }
-
-            // User has view capability. User can only see those reports user is in audience of.
-            if (empty($reports)) {
-                return ['1=2', []];
-            }
-
-            $prefix = database::generate_param_name() . '_';
-            [$where, $params] = $DB->get_in_or_equal($reports, SQL_PARAMS_NAMED, $prefix);
-            return ["rb.id {$where}", $params];
-        }
-
-        return ['', []];
     }
 }

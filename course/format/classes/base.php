@@ -26,6 +26,7 @@ namespace core_courseformat;
 
 use navigation_node;
 use moodle_page;
+use cm_info;
 use core_component;
 use course_modinfo;
 use html_writer;
@@ -36,8 +37,7 @@ use moodle_exception;
 use coding_exception;
 use moodle_url;
 use lang_string;
-use completion_info;
-use external_api;
+use core_external\external_api;
 use stdClass;
 use cache;
 use core_courseformat\output\legacy_renderer;
@@ -77,14 +77,18 @@ abstract class base {
     protected $course = false;
     /** @var array caches format options, please use course_format::get_format_options() */
     protected $formatoptions = array();
-    /** @var int the section number in single section format, zero for multiple section formats. */
-    protected $singlesection = 0;
+    /** @var int|null the section number in single section format, null for multiple section formats. */
+    protected $singlesection = null;
+    /** @var int|null the sectionid when a single section is selected, null when multiple sections are displayed. */
+    protected $singlesectionid = null;
     /** @var course_modinfo the current course modinfo, please use course_format::get_modinfo() */
     private $modinfo = null;
     /** @var array cached instances */
     private static $instances = array();
     /** @var array plugin name => class name. */
     private static $classesforformat = array('site' => 'site');
+    /** @var sectionmanager the format section manager. */
+    protected $sectionmanager = null;
 
     /**
      * Creates a new instance of class
@@ -106,7 +110,7 @@ abstract class base {
      * @param string $format
      * @return string
      */
-    protected static final function get_format_or_default($format) {
+    final protected static function get_format_or_default($format) {
         global $CFG;
         require_once($CFG->dirroot . '/course/lib.php');
 
@@ -149,7 +153,7 @@ abstract class base {
      * @param string $format
      * @return string
      */
-    protected static final function get_class_name($format) {
+    final protected static function get_class_name($format) {
         global $CFG;
         static $classnames = array('site' => 'format_site');
         if (!isset($classnames[$format])) {
@@ -174,9 +178,9 @@ abstract class base {
      *
      * @param int|stdClass $courseorid either course id or
      *     an object that has the property 'format' and may contain property 'id'
-     * @return course_format
+     * @return base
      */
-    public static final function instance($courseorid) {
+    final public static function instance($courseorid) {
         global $DB;
         if (!is_object($courseorid)) {
             $courseid = (int)$courseorid;
@@ -210,7 +214,7 @@ abstract class base {
      *
      * @param int $courseid
      */
-    public static final function reset_course_cache($courseid = 0) {
+    final public static function reset_course_cache($courseid = 0) {
         if ($courseid) {
             if (isset(self::$instances[$courseid])) {
                 foreach (self::$instances[$courseid] as $format => $object) {
@@ -224,6 +228,18 @@ abstract class base {
         } else {
             self::$instances = array();
         }
+    }
+    /**
+     * Reset the current user for all courses.
+     *
+     * The course format cache resets every time the course cache resets but
+     * also when the user changes their language, all course editors
+     *
+     * @return void
+     */
+    public static function session_cache_reset_all(): void {
+        $statecache = cache::make('core', 'courseeditorstate');
+        $statecache->purge();
     }
 
     /**
@@ -273,7 +289,7 @@ abstract class base {
      *
      * @return string
      */
-    public final function get_format() {
+    final public function get_format() {
         return $this->format;
     }
 
@@ -282,8 +298,17 @@ abstract class base {
      *
      * @return int
      */
-    public final function get_courseid() {
+    final public function get_courseid() {
         return $this->courseid;
+    }
+
+    /**
+     * Returns the course context.
+     *
+     * @return context_course the course context
+     */
+    final public function get_context(): context_course {
+        return context_course::instance($this->courseid);
     }
 
     /**
@@ -359,7 +384,7 @@ abstract class base {
      * This method ensures that 3rd party course format plugins that still use 'numsections' continue to
      * work but at the same time we no longer expect formats to have 'numsections' property.
      *
-     * @return int
+     * @return int The last section number, or -1 if sections are entirely missing
      */
     public function get_last_section_number() {
         $course = $this->get_course();
@@ -368,6 +393,12 @@ abstract class base {
         }
         $modinfo = get_fast_modinfo($course);
         $sections = $modinfo->get_section_info_all();
+
+        // Sections seem to be missing entirely. Avoid subsequent errors and return early.
+        if (count($sections) === 0) {
+            return -1;
+        }
+
         return (int)max(array_keys($sections));
     }
 
@@ -444,14 +475,6 @@ abstract class base {
     /**
      * Returns true if this course format uses activity indentation.
      *
-     * Indentation is not supported by core formats anymore and may be deprecated in the future.
-     * This method will keep a default return "true" for legacy reasons but new formats should override
-     * it with a return false to prevent future deprecations.
-     *
-     * A message in a bottle: if indentation is finally deprecated, both behat steps i_indent_right_activity
-     * and i_indent_left_activity should be removed as well. Right now no core behat uses them but indentation
-     * is not officially deprecated so they are still available for the contrib formats.
-     *
      * @return bool if the course format uses indentation.
      */
     public function uses_indentation(): bool {
@@ -467,7 +490,7 @@ abstract class base {
      *
      * @return array of section_info objects
      */
-    public final function get_sections() {
+    final public function get_sections() {
         if ($course = $this->get_course()) {
             $modinfo = get_fast_modinfo($course);
             return $modinfo->get_section_info_all();
@@ -482,7 +505,7 @@ abstract class base {
      * @param int $strictness
      * @return section_info
      */
-    public final function get_section($section, $strictness = IGNORE_MISSING) {
+    final public function get_section($section, $strictness = IGNORE_MISSING) {
         if (is_object($section)) {
             $sectionnum = $section->section;
         } else {
@@ -501,8 +524,8 @@ abstract class base {
     /**
      * Returns the display name of the given section that the course prefers.
      *
-     * @param int|stdClass $section Section object from database or just field course_sections.section
-     * @return Display name that the course format prefers, e.g. "Topic 2"
+     * @param int|stdClass|section_info $section Section object from database or just field course_sections.section
+     * @return string Display name that the course format prefers, e.g. "Topic 2"
      */
     public function get_section_name($section) {
         if (is_object($section)) {
@@ -541,13 +564,96 @@ abstract class base {
     /**
      * Set if the current format instance will show multiple sections or an individual one.
      *
+     * Some formats has the hability to swith from one section to multiple sections per page.
+     *
+     * @param int|null $sectionid null for all sections or a sectionid.
+     */
+    public function set_sectionid(?int $sectionid): void {
+        if ($sectionid === null) {
+            $this->singlesection = null;
+            $this->singlesectionid = null;
+            return;
+        }
+
+        $modinfo = get_fast_modinfo($this->courseid);
+        $sectioninfo = $modinfo->get_section_info_by_id($sectionid);
+        if ($sectioninfo === null) {
+            throw new coding_exception('Invalid sectionid: '. $sectionid);
+        }
+
+        $this->singlesection = $sectioninfo->section;
+        $this->singlesectionid = $sectionid;
+    }
+
+    /**
+     * Get if the current format instance will show multiple sections or an individual one.
+     *
      * Some formats has the hability to swith from one section to multiple sections per page,
-     * this method replaces the old print_multiple_section_page and print_single_section_page.
+     * output components will use this method to know if the current display is a single or
+     * multiple sections.
+     *
+     * @return int|null null for all sections or the sectionid.
+     */
+    public function get_sectionid(): ?int {
+        return $this->singlesectionid;
+    }
+
+    /**
+     * Set if the current format instance will show multiple sections or an individual one.
+     *
+     * Some formats has the hability to swith from one section to multiple sections per page.
      *
      * @param int $singlesection zero for all sections or a section number
+     * @deprecated Since 4.4. Use set_sectionnum instead.
+     * @todo MDL-80116 This will be deleted in Moodle 4.8.
      */
     public function set_section_number(int $singlesection): void {
-        $this->singlesection = $singlesection;
+
+        debugging(
+            'The method core_courseformat\base::set_section_number() has been deprecated, please use set_sectionnum() instead.',
+            DEBUG_DEVELOPER
+        );
+
+        if ($singlesection === 0) {
+            // Convert zero to null, to guarantee all the sections are displayed.
+            $singlesection = null;
+        }
+        $this->set_sectionnum($singlesection);
+    }
+
+    /**
+     * Set the current section number to display.
+     * Some formats has the hability to swith from one section to multiple sections per page.
+     *
+     * @since Moodle 4.4
+     * @param int|null $sectionnum null for all sections or a sectionid.
+     */
+    public function set_sectionnum(?int $sectionnum): void {
+        if ($sectionnum === null) {
+            $this->singlesection = null;
+            $this->singlesectionid = null;
+            return;
+        }
+
+        $modinfo = get_fast_modinfo($this->courseid);
+        $sectioninfo = $modinfo->get_section_info($sectionnum);
+        if ($sectioninfo === null) {
+            throw new coding_exception('Invalid sectionnum: '. $sectionnum);
+        }
+
+        $this->singlesection = $sectionnum;
+        $this->singlesectionid = $sectioninfo->id;
+    }
+
+    /**
+     * Get the current section number to display.
+     * Some formats has the hability to swith from one section to multiple sections per page.
+     *
+     * @since Moodle 4.4
+     * @return int|null the current section number or null when there is no single section.
+     */
+    public function get_sectionnum(): ?int {
+        return $this->singlesection;
     }
 
     /**
@@ -558,8 +664,21 @@ abstract class base {
      * multiple sections.
      *
      * @return int zero for all sections or the sectin number
+     * @deprecated Since 4.4. Use get_sectionnum instead.
+     * @todo MDL-80116 This will be deleted in Moodle 4.8.
      */
     public function get_section_number(): int {
+
+        debugging(
+            'The method core_courseformat\base::get_section_number() has been deprecated, please use get_sectionnum() instead.',
+            DEBUG_DEVELOPER
+        );
+
+        if ($this->singlesection === null) {
+            // Convert null to zero, to guarantee all the sections are displayed.
+            return 0;
+        }
+
         return $this->singlesection;
     }
 
@@ -608,7 +727,7 @@ abstract class base {
         $course = $this->get_course();
         try {
             $sectionpreferences = (array) json_decode(
-                get_user_preferences('coursesectionspreferences_' . $course->id, null, $USER->id)
+                get_user_preferences("coursesectionspreferences_{$course->id}", '', $USER->id)
             );
             if (empty($sectionpreferences)) {
                 $sectionpreferences = [];
@@ -689,14 +808,14 @@ abstract class base {
      * @param int|stdClass $section Section object from database or just field course_sections.section
      *     if null the course view page is returned
      * @param array $options options for view URL. At the moment core uses:
-     *     'navigation' (bool) if true and section has no separate page, the function returns null
-     *     'sr' (int) used by multipage formats to specify to which section to return
+     *     'navigation' (bool) if true and section not empty, the function returns section page; otherwise, it returns course page.
+     *     'sr' (int) used by course formats to specify to which section to return
+     *     'expanded' (bool) if true the section will be shown expanded, true by default
      * @return null|moodle_url
      */
     public function get_view_url($section, $options = array()) {
-        global $CFG;
         $course = $this->get_course();
-        $url = new moodle_url('/course/view.php', array('id' => $course->id));
+        $url = new moodle_url('/course/view.php', ['id' => $course->id]);
 
         if (array_key_exists('sr', $options)) {
             $sectionno = $options['sr'];
@@ -705,14 +824,57 @@ abstract class base {
         } else {
             $sectionno = $section;
         }
-        if (empty($CFG->linkcoursesections) && !empty($options['navigation']) && $sectionno !== null) {
-            // By default assume that sections are never displayed on separate pages.
-            return null;
+        if ((!empty($options['navigation']) || array_key_exists('sr', $options)) && $sectionno !== null) {
+            // Display section on separate page.
+            $sectioninfo = $this->get_section($sectionno);
+            return new moodle_url('/course/section.php', ['id' => $sectioninfo->id]);
         }
         if ($this->uses_sections() && $sectionno !== null) {
+            // The url includes the parameter to expand the section by default.
+            if (!array_key_exists('expanded', $options)) {
+                $options['expanded'] = true;
+            }
+            if ($options['expanded']) {
+                // This parameter is being set by default.
+                $url->param('expandsection', $sectionno);
+            }
             $url->set_anchor('section-'.$sectionno);
         }
+
         return $url;
+    }
+
+    /**
+     * Return the old non-ajax activity action url.
+     *
+     * BrowserKit behats tests cannot trigger javascript events,
+     * so we must translate to an old non-ajax url while non-ajax
+     * course editing is still supported.
+     *
+     * @param string $action action name the reactive action
+     * @param cm_info $cm course module
+     * @return moodle_url
+     */
+    public function get_non_ajax_cm_action_url(string $action, cm_info $cm): moodle_url {
+        $nonajaxactions = [
+            'cmDelete' => 'delete',
+            'cmDuplicate' => 'duplicate',
+            'cmHide' => 'hide',
+            'cmShow' => 'show',
+            'cmStealth' => 'stealth',
+        ];
+        if (!isset($nonajaxactions[$action])) {
+            throw new coding_exception('Unknown activity action: ' . $action);
+        }
+        $nonajaxaction = $nonajaxactions[$action];
+        $nonajaxurl = new moodle_url(
+            '/course/mod.php',
+            ['sesskey' => sesskey(), $nonajaxaction => $cm->id]
+        );
+        if (!is_null($this->get_sectionid())) {
+            $nonajaxurl->param('sr', $this->get_sectionnum());
+        }
+        return $nonajaxurl;
     }
 
     /**
@@ -771,11 +933,62 @@ abstract class base {
     }
 
     /**
+     * Return custom strings for the course editor.
+     *
+     * This method is mainly used to translate the "section" related strings into
+     * the specific format plugins name such as "Topics" or "Weeks".
+     *
+     * @return stdClass[] an array of objects with string "component" and "key"
+     */
+    public function get_editor_custom_strings(): array {
+        $result = [];
+        $stringmanager = get_string_manager();
+        $component = 'format_' . $this->format;
+        $formatoverridbles = [
+            'sectionavailability_title',
+            'sectiondelete_title',
+            'sectiondelete_info',
+            'sectionsdelete_title',
+            'sectionsdelete_info',
+            'sectionmove_title',
+            'sectionmove_info',
+            'sectionsavailability_title',
+            'sectionsmove_title',
+            'sectionsmove_info',
+            'selectsection'
+        ];
+        foreach ($formatoverridbles as $key) {
+            if ($stringmanager->string_exists($key, $component)) {
+                $result[] = (object)['component' => $component, 'key' => $key];
+            }
+        }
+        return $result;
+    }
+
+    /**
+     * Get the proper format plugin string if it exists.
+     *
+     * If the format_PLUGINNAME does not provide a valid string,
+     * core_courseformat will be user as the component.
+     *
+     * @param string $key the string key
+     * @param string|object|array|int $data extra data that can be used within translation strings
+     * @return string the get_string result
+     */
+    public function get_format_string(string $key, $data = null): string {
+        $component = 'format_' . $this->get_format();
+        if (!get_string_manager()->string_exists($key, $component)) {
+            $component = 'core_courseformat';
+        }
+        return get_string($key, $component, $data);
+    }
+
+    /**
      * Returns the localised name of this course format plugin
      *
      * @return lang_string
      */
-    public final function get_format_name() {
+    final public function get_format_name() {
         return new lang_string('pluginname', 'format_'.$this->get_format());
     }
 
@@ -999,7 +1212,7 @@ abstract class base {
      * @param int|null $sectionid null if it is course format option
      * @return array array of options that have valid values
      */
-    protected function validate_format_options(array $rawdata, int $sectionid = null) : array {
+    protected function validate_format_options(array $rawdata, int $sectionid = null): array {
         if (!$sectionid) {
             $allformatoptions = $this->course_format_options(true);
         } else {
@@ -1023,7 +1236,7 @@ abstract class base {
      * @param array $data data to insert/update
      * @return array array of options that have valid values
      */
-    public function validate_course_format_options(array $data) : array {
+    public function validate_course_format_options(array $data): array {
         return $this->validate_format_options($data);
     }
 
@@ -1068,7 +1281,7 @@ abstract class base {
         $changed = $needrebuild = false;
         foreach ($defaultoptions as $key => $value) {
             if (isset($records[$key])) {
-                if (array_key_exists($key, $data) && $records[$key]->value !== $data[$key]) {
+                if (array_key_exists($key, $data) && $records[$key]->value != $data[$key]) {
                     $DB->set_field('course_format_options', 'value',
                             $data[$key], array('id' => $records[$key]->id));
                     $changed = true;
@@ -1273,16 +1486,28 @@ abstract class base {
     public function get_output_classname(string $outputname): string {
         // The core output class.
         $baseclass = "core_courseformat\\output\\local\\$outputname";
-        // Check if there is a specific format class.
-        $component = 'format_'. $this->get_format();
-        $outputclass = "$component\\output\\courseformat\\$outputname";
-        if (class_exists($outputclass)) {
-            // Check that the outputclass is a subclass of the base class.
-            if (!is_subclass_of($outputclass, $baseclass)) {
-                throw new coding_exception("The \"$outputclass\" must extend \"$baseclass\"");
+
+        // Look in this format and any parent formats before we get to the base one.
+        $classes = array_merge([get_class($this)], class_parents($this));
+        foreach ($classes as $component) {
+            if ($component === self::class) {
+                break;
             }
-            return $outputclass;
+
+            // Because course formats are in the root namespace, there is no need to process the
+            // class name - it is already a Frankenstyle component name beginning 'format_'.
+
+            // Check if there is a specific class in this format.
+            $outputclass = "$component\\output\\courseformat\\$outputname";
+            if (class_exists($outputclass)) {
+                // Check that the outputclass is a subclass of the base class.
+                if (!is_subclass_of($outputclass, $baseclass)) {
+                    throw new coding_exception("The \"$outputclass\" must extend \"$baseclass\"");
+                }
+                return $outputclass;
+            }
         }
+
         return $baseclass;
     }
 
@@ -1328,13 +1553,33 @@ abstract class base {
     /**
      * return true if the course editor must be displayed.
      *
+     * @param array|null $capabilities array of capabilities a user needs to have to see edit controls in general.
+     *  If null or not specified, the user needs to have 'moodle/course:manageactivities'.
      * @return bool true if edit controls must be displayed
      */
-    public function show_editor(): bool {
+    public function show_editor(?array $capabilities = ['moodle/course:manageactivities']): bool {
         global $PAGE;
         $course = $this->get_course();
         $coursecontext = context_course::instance($course->id);
-        return $PAGE->user_is_editing() && has_capability('moodle/course:update', $coursecontext);
+        if ($capabilities === null) {
+            $capabilities = ['moodle/course:manageactivities'];
+        }
+        return $PAGE->user_is_editing() && has_all_capabilities($capabilities, $coursecontext);
+    }
+
+    /**
+     * Check if the group mode can be displayed.
+     * @param cm_info $cm the activity module
+     * @return bool
+     */
+    public function show_groupmode(cm_info $cm): bool {
+        if (!plugin_supports('mod', $cm->modname, FEATURE_GROUPS, false)) {
+            return false;
+        }
+        if (!has_capability('moodle/course:manageactivities', $cm->context)) {
+            return false;
+        }
+        return true;
     }
 
     /**
@@ -1380,18 +1625,22 @@ abstract class base {
      *
      * Do not call this function directly, instead call course_delete_section()
      *
-     * @param int|stdClass|section_info $section
+     * @param int|stdClass|section_info $sectionornum
      * @param bool $forcedeleteifnotempty if set to false section will not be deleted if it has modules in it.
      * @return bool whether section was deleted
      */
-    public function delete_section($section, $forcedeleteifnotempty = false) {
+    public function delete_section($sectionornum, $forcedeleteifnotempty = false) {
         global $DB;
         if (!$this->uses_sections()) {
             // Not possible to delete section if sections are not used.
             return false;
         }
-        if (!is_object($section)) {
-            $section = $DB->get_record('course_sections', array('course' => $this->get_courseid(), 'section' => $section),
+        if (is_object($sectionornum)) {
+            $section = $sectionornum;
+        } else {
+            $section = $DB->get_record(
+                'course_sections',
+                ['course' => $this->get_courseid(), 'section' => $sectionornum],
                 'id,section,sequence,summary');
         }
         if (!$section || !$section->section) {
@@ -1445,6 +1694,44 @@ abstract class base {
         }
 
         return true;
+    }
+
+    /**
+     * Wrapper for course_delete_module method.
+     *
+     * Format plugins can override this method to provide their own implementation of course_delete_module.
+     *
+     * @param cm_info $cm the course module information
+     * @param bool $async whether or not to try to delete the module using an adhoc task. Async also depends on a plugin hook.
+     * @throws moodle_exception
+     */
+    public function delete_module(cm_info $cm, bool $async = false) {
+        course_delete_module($cm->id, $async);
+    }
+
+    /**
+     * Moves a section just after the target section.
+     *
+     * @param section_info $section the section to move
+     * @param section_info $destination the section that should be below the moved section
+     * @return boolean if the section can be moved or not
+     */
+    public function move_section_after(section_info $section, section_info $destination): bool {
+        if ($section->section == $destination->section || $section->section == $destination->section + 1) {
+            return true;
+        }
+        // The move_section_to moves relative to the section to move. However, this
+        // method will move the target section always after the destination.
+        if ($section->section > $destination->section) {
+            $newsectionnumber = $destination->section + 1;
+        } else {
+            $newsectionnumber = $destination->section;
+        }
+        return move_section_to(
+            $this->get_course(),
+            $section->section,
+            $newsectionnumber
+        );
     }
 
     /**
@@ -1619,8 +1906,8 @@ abstract class base {
             $section = $modinfo->get_section_info($section->section);
         }
 
-        if ($sr) {
-            $this->set_section_number($sr);
+        if (!is_null($sr)) {
+            $this->set_sectionnum($sr);
         }
 
         switch($action) {
@@ -1694,5 +1981,64 @@ abstract class base {
         $course = $this->get_course();
         // By default, formats store some most display specifics in a user preference.
         $DB->delete_records('user_preferences', ['name' => 'coursesectionspreferences_' . $course->id]);
+    }
+
+    /**
+     * Duplicate a section
+     *
+     * @param section_info $originalsection The section to be duplicated
+     * @return section_info The new duplicated section
+     * @since Moodle 4.2
+     */
+    public function duplicate_section(section_info $originalsection): section_info {
+        if (!$this->uses_sections()) {
+            throw new moodle_exception('sectionsnotsupported', 'core_courseformat');
+        }
+
+        $course = $this->get_course();
+        $oldsectioninfo = get_fast_modinfo($course)->get_section_info($originalsection->section);
+        $newsection = course_create_section($course, $oldsectioninfo->section + 1); // Place new section after existing one.
+
+        if (!empty($originalsection->name)) {
+            $newsection->name = get_string('duplicatedsection', 'moodle', $originalsection->name);
+        } else {
+            $newsection->name = $originalsection->name;
+        }
+        $newsection->summary = $originalsection->summary;
+        $newsection->summaryformat = $originalsection->summaryformat;
+        $newsection->visible = $originalsection->visible;
+        $newsection->availability = $originalsection->availability;
+        course_update_section($course, $newsection, $newsection);
+
+        $modinfo = $this->get_modinfo();
+
+        // Duplicate the section modules, should they exist.
+        if (array_key_exists($originalsection->section, $modinfo->sections)) {
+            foreach ($modinfo->sections[$originalsection->section] as $modnumber) {
+                $originalcm = $modinfo->cms[$modnumber];
+                duplicate_module($course, $originalcm, $newsection->id, false);
+            }
+        }
+
+        return get_fast_modinfo($course)->get_section_info_by_id($newsection->id);
+    }
+
+    /**
+     * Get the required javascript files for the course format.
+     *
+     * @return array The list of javascript files required by the course format.
+     */
+    public function get_required_jsfiles(): array {
+        return [];
+    }
+
+    /**
+     * Determines whether section items can be removed from the navigation, just like the breadcrumb feature seen on activity pages.
+     * By default, it returns false but can be overridden by the course format to change the behaviour.
+     *
+     * @return bool True if sections can be removed, false otherwise.
+     */
+    public function can_sections_be_removed_from_navigation(): bool {
+        return false;
     }
 }

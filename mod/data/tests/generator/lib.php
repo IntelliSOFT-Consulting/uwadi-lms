@@ -120,6 +120,11 @@ class mod_data_generator extends testing_module_generator {
             $record['description'] = " This is testField - " . $this->databasefieldcount;
         }
 
+        if (isset($record['param1']) && !empty($record['param1'])) {
+            // Some fields have multiline entries.
+            $record['param1'] = str_replace('\n', "\n", $record['param1']);
+        }
+
         if (!isset($record['param1'])) {
             if ($record['type'] == 'checkbox') {
                 $record['param1'] = implode("\n", array('opt1', 'opt2', 'opt3', 'opt4'));
@@ -129,7 +134,7 @@ class mod_data_generator extends testing_module_generator {
                 $record['param1'] = implode("\n", array('menu1', 'menu2', 'menu3', 'menu4'));
             } else if ($record['type'] == 'multimenu') {
                 $record['param1'] = implode("\n", array('multimenu1', 'multimenu2', 'multimenu3', 'multimenu4'));
-            } else if (($record['type'] === 'text') || ($record['type'] === 'url')) {
+            } else if ($record['type'] === 'url') {
                 $record['param1'] = 1;
             } else if ($record['type'] == 'latlong') {
                 $record['param1'] = 'Google Maps';
@@ -178,8 +183,6 @@ class mod_data_generator extends testing_module_generator {
         $field = data_get_field($record, $data);
         $field->insert_field();
 
-        data_generate_default_template($data, 'addtemplate', 0, false, true);
-
         return $field;
     }
 
@@ -208,10 +211,18 @@ class mod_data_generator extends testing_module_generator {
      * @param int $groupid
      * @param array $tags
      * @param array $options
+     * @param int $userid if defined, it will be the author of the entry
      * @return int id of the generated record in table {data_records}
      */
-    public function create_entry($data, array $contents, $groupid = 0, $tags = [], array $options = null) {
+    public function create_entry($data, array $contents, $groupid = 0, $tags = [], array $options = null, int $userid = 0) {
         global $DB, $USER, $CFG;
+
+        // Set current user if defined.
+        if (!empty($userid)) {
+            $currentuser = $USER;
+            $user = \core_user::get_user($userid);
+            $this->set_user($user);
+        }
 
         $this->databaserecordcount++;
 
@@ -314,7 +325,7 @@ class mod_data_generator extends testing_module_generator {
                     get_file_storage()->create_file_from_string(['component' => 'user', 'filearea' => 'draft',
                         'contextid' => $usercontext->id, 'itemid' => $itemid, 'filepath' => '/',
                         'filename' => $filename],
-                        file_get_contents($CFG->dirroot.'/mod/data/pix/monologo.png'));
+                        file_get_contents($CFG->dirroot.'/mod/data/field/picture/pix/sample.png'));
                 }
 
                 $fieldname = 'field_' . $fieldid . '_file';
@@ -360,6 +371,10 @@ class mod_data_generator extends testing_module_generator {
             $cm = get_coursemodule_from_instance('data', $data->id);
             core_tag_tag::set_item_tags('mod_data', 'data_records', $recordid,
                 context_module::instance($cm->id), $tags);
+        }
+
+        if (isset($currentuser)) {
+            $this->set_user($currentuser);
         }
 
         return $recordid;

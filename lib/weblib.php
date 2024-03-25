@@ -30,6 +30,8 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
+use Psr\Http\Message\UriInterface;
+
 defined('MOODLE_INTERNAL') || die();
 
 // Constants.
@@ -91,13 +93,18 @@ define('URL_MATCH_EXACT', 2);
  * @return string
  */
 function s($var) {
-
     if ($var === false) {
         return '0';
     }
 
-    return preg_replace('/&amp;#(\d+|x[0-9a-f]+);/i', '&#$1;',
-            htmlspecialchars($var, ENT_QUOTES | ENT_HTML401 | ENT_SUBSTITUTE));
+    if ($var === null || $var === '') {
+        return '';
+    }
+
+    return preg_replace(
+        '/&amp;#(\d+|x[0-9a-f]+);/i', '&#$1;',
+        htmlspecialchars($var, ENT_QUOTES | ENT_HTML401 | ENT_SUBSTITUTE)
+    );
 }
 
 /**
@@ -108,7 +115,6 @@ function s($var) {
  * @see s()
  *
  * @param string $var the string potentially containing HTML characters
- * @return string
  */
 function p($var) {
     echo s($var);
@@ -148,6 +154,9 @@ function addslashes_js($var) {
  * @return string The remaining URL.
  */
 function strip_querystring($url) {
+    if ($url === null || $url === '') {
+        return '';
+    }
 
     if ($commapos = strpos($url, '?')) {
         return substr($url, 0, $commapos);
@@ -248,7 +257,6 @@ function get_local_referer($stripquery = true) {
  *     - and output the params as hidden fields to be output within a form
  *
  * @copyright 2007 jamiesensei
- * @link http://docs.moodle.org/dev/lib/weblib.php_moodle_url See short write up here
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  * @package core
  */
@@ -336,6 +344,7 @@ class moodle_url {
             $this->anchor = $url->anchor;
 
         } else {
+            $url = $url ?? '';
             // Detect if anchor used.
             $apos = strpos($url, '#');
             if ($apos !== false) {
@@ -526,6 +535,27 @@ class moodle_url {
         } else {
             return implode('&', $arr);
         }
+    }
+
+    /**
+     * Get the url params as an array of key => value pairs.
+     *
+     * This helps in handling cases where url params contain arrays.
+     *
+     * @return array params array for templates.
+     */
+    public function export_params_for_template(): array {
+        $data = [];
+        foreach ($this->params as $key => $val) {
+            if (is_array($val)) {
+                foreach ($val as $index => $value) {
+                    $data[] = ['name' => $key.'['.$index.']', 'value' => $value];
+                }
+            } else {
+                $data[] = ['name' => $key, 'value' => $val];
+            }
+        }
+        return $data;
     }
 
     /**
@@ -743,6 +773,26 @@ class moodle_url {
     // Static factory methods.
 
     /**
+     * Create a new moodle_url instance from a UriInterface.
+     *
+     * @param UriInterface $uri
+     * @return self
+     */
+    public static function from_uri(UriInterface $uri): self {
+        $url = new self(
+            url: $uri->getScheme() . '://' . $uri->getAuthority() . $uri->getPath(),
+            anchor: $uri->getFragment() ?: null,
+        );
+
+        $params = $uri->getQuery();
+        foreach (explode('&', $params) as $param) {
+            $url->param(...explode('=', $param, 2));
+        }
+
+        return $url;
+    }
+
+    /**
      * General moodle file url.
      *
      * @param string $urlbase the script serving the file
@@ -872,7 +922,20 @@ class moodle_url {
     }
 
     /**
-     * Returns URL a relative path from $CFG->wwwroot
+     * Checks if URL is relative to $CFG->wwwroot.
+     *
+     * @return bool True if URL is relative to $CFG->wwwroot; otherwise, false.
+     */
+    public function is_local_url(): bool {
+        global $CFG;
+
+        $url = $this->out();
+        // Does URL start with wwwroot? Otherwise, URL isn't relative to wwwroot.
+        return ( ($url === $CFG->wwwroot) || (strpos($url, $CFG->wwwroot.'/') === 0) );
+    }
+
+    /**
+     * Returns URL as relative path from $CFG->wwwroot
      *
      * Can be used for passing around urls with the wwwroot stripped
      *
@@ -884,10 +947,9 @@ class moodle_url {
     public function out_as_local_url($escaped = true, array $overrideparams = null) {
         global $CFG;
 
-        $url = $this->out($escaped, $overrideparams);
-
-        // Url should be equal to wwwroot. If not then throw exception.
-        if (($url === $CFG->wwwroot) || (strpos($url, $CFG->wwwroot.'/') === 0)) {
+        // URL should be relative to wwwroot. If not then throw exception.
+        if ($this->is_local_url()) {
+            $url = $this->out($escaped, $overrideparams);
             $localurl = substr($url, strlen($CFG->wwwroot));
             return !empty($localurl) ? $localurl : '';
         } else {
@@ -1108,9 +1170,14 @@ function page_get_doc_link_path(moodle_page $page) {
  */
 function validate_email($address) {
     global $CFG;
-    require_once($CFG->libdir.'/phpmailer/moodle_phpmailer.php');
 
-    return moodle_phpmailer::validateAddress($address) && !preg_match('/[<>]/', $address);
+    if ($address === null || $address === false || $address === '') {
+        return false;
+    }
+
+    require_once("{$CFG->libdir}/phpmailer/moodle_phpmailer.php");
+
+    return moodle_phpmailer::validateAddress($address ?? '') && !preg_match('/[<>]/', $address);
 }
 
 /**
@@ -1195,7 +1262,6 @@ function format_text_menu() {
  * Options:
  *      trusted     :   If true the string won't be cleaned. Default false required noclean=true.
  *      noclean     :   If true the string won't be cleaned, unless $CFG->forceclean is set. Default false required trusted=true.
- *      nocache     :   If true the strign will not be cached and will be formatted every call. Default false.
  *      filter      :   If true the string will be run through applicable filters as well. Default true.
  *      para        :   If true then the returned string will be wrapped in div tags. Default true.
  *      newlines    :   If true then lines newline breaks will be converted to HTML newline breaks. Default true.
@@ -1207,175 +1273,132 @@ function format_text_menu() {
  *      blanktarget :   If true all <a> tags will have target="_blank" added unless target is explicitly specified.
  * </pre>
  *
- * @staticvar array $croncache
  * @param string $text The text to be formatted. This is raw text originally from user input.
  * @param int $format Identifier of the text format to be used
  *            [FORMAT_MOODLE, FORMAT_HTML, FORMAT_PLAIN, FORMAT_MARKDOWN]
- * @param object/array $options text formatting options
+ * @param stdClass|array $options text formatting options
  * @param int $courseiddonotuse deprecated course id, use context option instead
  * @return string
  */
 function format_text($text, $format = FORMAT_MOODLE, $options = null, $courseiddonotuse = null) {
-    global $CFG, $DB, $PAGE;
+    global $CFG;
 
-    if ($text === '' || is_null($text)) {
-        // No need to do any filters and cleaning.
-        return '';
+    // Manually include the formatting class for now until after the release after 4.5 LTS.
+    require_once("{$CFG->libdir}/classes/formatting.php");
+
+    if ($format === FORMAT_WIKI) {
+        // This format was deprecated in Moodle 1.5.
+        throw new \coding_exception(
+            'Wiki-like formatting is not supported.'
+        );
     }
 
-    // Detach object, we can not modify it.
-    $options = (array)$options;
+    if ($options instanceof \core\context) {
+        // A common mistake has been to call this function with a context object.
+        // This has never been expected, or nor supported.
+        debugging(
+            'The options argument should not be a context object directly. ' .
+                ' Please pass an array with a context key instead.',
+            DEBUG_DEVELOPER,
+        );
+        $params['context'] = $options;
+        $options = [];
+    }
 
-    if (!isset($options['trusted'])) {
-        $options['trusted'] = false;
+    if ($options) {
+        $options = (array) $options;
     }
-    if (!isset($options['noclean'])) {
-        if ($options['trusted'] and trusttext_active()) {
-            // No cleaning if text trusted and noclean not specified.
-            $options['noclean'] = true;
-        } else {
-            $options['noclean'] = false;
-        }
-    }
-    if (!empty($CFG->forceclean)) {
-        // Whatever the caller claims, the admin wants all content cleaned anyway.
-        $options['noclean'] = false;
-    }
-    if (!isset($options['nocache'])) {
-        $options['nocache'] = false;
-    }
-    if (!isset($options['filter'])) {
-        $options['filter'] = true;
-    }
-    if (!isset($options['para'])) {
-        $options['para'] = true;
-    }
-    if (!isset($options['newlines'])) {
-        $options['newlines'] = true;
-    }
-    if (!isset($options['overflowdiv'])) {
-        $options['overflowdiv'] = false;
-    }
-    $options['blanktarget'] = !empty($options['blanktarget']);
 
-    // Calculate best context.
-    if (empty($CFG->version) or $CFG->version < 2013051400 or during_initial_install()) {
+    if (empty($CFG->version) || $CFG->version < 2013051400 || during_initial_install()) {
         // Do not filter anything during installation or before upgrade completes.
-        $context = null;
-
-    } else if (isset($options['context'])) { // First by explicit passed context option.
-        if (is_object($options['context'])) {
-            $context = $options['context'];
+        $params['context'] = null;
+    } else if ($options && isset($options['context'])) { // First by explicit passed context option.
+        if (is_numeric($options['context'])) {
+            // A contextid was passed.
+            $params['context'] = \core\context::instance_by_id($options['context']);
+        } else if ($options['context'] instanceof \core\context) {
+            $params['context'] = $options['context'];
         } else {
-            $context = context::instance_by_id($options['context']);
+            debugging(
+                'Unknown context passed to format_text(). Content will not be filtered.',
+                DEBUG_DEVELOPER,
+            );
         }
+
+        // Unset the context from $options to prevent it overriding the configured value.
+        unset($options['context']);
     } else if ($courseiddonotuse) {
         // Legacy courseid.
-        $context = context_course::instance($courseiddonotuse);
-    } else {
-        // Fallback to $PAGE->context this may be problematic in CLI and other non-standard pages :-(.
-        $context = $PAGE->context;
-    }
-
-    if (!$context) {
-        // Either install/upgrade or something has gone really wrong because context does not exist (yet?).
-        $options['nocache'] = true;
-        $options['filter']  = false;
-    }
-
-    if ($options['filter']) {
-        $filtermanager = filter_manager::instance();
-        $filtermanager->setup_page_for_filters($PAGE, $context); // Setup global stuff filters may have.
-        $filteroptions = array(
-            'originalformat' => $format,
-            'noclean' => $options['noclean'],
+        $params['context'] = \core\context\course::instance($courseiddonotuse);
+        debugging(
+            "Passing a courseid to format_text() is deprecated, please pass a context instead.",
+            DEBUG_DEVELOPER,
         );
-    } else {
-        $filtermanager = new null_filter_manager();
-        $filteroptions = array();
     }
 
-    switch ($format) {
-        case FORMAT_HTML:
-            if (!$options['noclean']) {
-                $text = clean_text($text, FORMAT_HTML, $options);
-            }
-            $text = $filtermanager->filter_text($text, $context, $filteroptions);
-            break;
+    $params['text'] =  $text;
 
-        case FORMAT_PLAIN:
-            $text = s($text); // Cleans dangerous JS.
-            $text = rebuildnolinktag($text);
-            $text = str_replace('  ', '&nbsp; ', $text);
-            $text = nl2br($text);
-            break;
-
-        case FORMAT_WIKI:
-            // This format is deprecated.
-            $text = '<p>NOTICE: Wiki-like formatting has been removed from Moodle.  You should not be seeing
-                     this message as all texts should have been converted to Markdown format instead.
-                     Please post a bug report to http://moodle.org/bugs with information about where you
-                     saw this message.</p>'.s($text);
-            break;
-
-        case FORMAT_MARKDOWN:
-            $text = markdown_to_html($text);
-            if (!$options['noclean']) {
-                $text = clean_text($text, FORMAT_HTML, $options);
-            }
-            $text = $filtermanager->filter_text($text, $context, $filteroptions);
-            break;
-
-        default:  // FORMAT_MOODLE or anything else.
-            $text = text_to_html($text, null, $options['para'], $options['newlines']);
-            if (!$options['noclean']) {
-                $text = clean_text($text, FORMAT_HTML, $options);
-            }
-            $text = $filtermanager->filter_text($text, $context, $filteroptions);
-            break;
-    }
-    if ($options['filter']) {
-        // At this point there should not be any draftfile links any more,
-        // this happens when developers forget to post process the text.
-        // The only potential problem is that somebody might try to format
-        // the text before storing into database which would be itself big bug..
-        $text = str_replace("\"$CFG->wwwroot/draftfile.php", "\"$CFG->wwwroot/brokenfile.php#", $text);
-
-        if ($CFG->debugdeveloper) {
-            if (strpos($text, '@@PLUGINFILE@@/') !== false) {
-                debugging('Before calling format_text(), the content must be processed with file_rewrite_pluginfile_urls()',
-                    DEBUG_DEVELOPER);
-            }
+    if ($options) {
+        // The smiley option was deprecated in Moodle 2.0.
+        if (array_key_exists('smiley', $options)) {
+            unset($options['smiley']);
+            debugging(
+                'The smiley option is deprecated and no longer used.',
+                DEBUG_DEVELOPER,
+            );
         }
-    }
 
-    if (!empty($options['overflowdiv'])) {
-        $text = html_writer::tag('div', $text, array('class' => 'no-overflow'));
-    }
+        // The nocache option was deprecated in Moodle 2.3 in MDL-34347.
+        if (array_key_exists('nocache', $options)) {
+            unset($options['nocache']);
+            debugging(
+                'The nocache option is deprecated and no longer used.',
+                DEBUG_DEVELOPER,
+            );
+        }
 
-    if ($options['blanktarget']) {
-        $domdoc = new DOMDocument();
-        libxml_use_internal_errors(true);
-        $domdoc->loadHTML('<?xml version="1.0" encoding="UTF-8" ?>' . $text);
-        libxml_clear_errors();
-        foreach ($domdoc->getElementsByTagName('a') as $link) {
-            if ($link->hasAttribute('target') && strpos($link->getAttribute('target'), '_blank') === false) {
-                continue;
-            }
-            $link->setAttribute('target', '_blank');
-            if (strpos($link->getAttribute('rel'), 'noreferrer') === false) {
-                $link->setAttribute('rel', trim($link->getAttribute('rel') . ' noreferrer'));
+        $validoptions = [
+            'text',
+            'format',
+            'context',
+            'trusted',
+            'clean',
+            'filter',
+            'para',
+            'newlines',
+            'overflowdiv',
+            'blanktarget',
+            'allowid',
+            'noclean',
+        ];
+
+        $invalidoptions = array_diff(array_keys($options), $validoptions);
+        if ($invalidoptions) {
+            debugging(sprintf(
+                'The following options are not valid: %s',
+                implode(', ', $invalidoptions),
+            ), DEBUG_DEVELOPER);
+            foreach ($invalidoptions as $option) {
+                unset($options[$option]);
             }
         }
 
-        // This regex is nasty and I don't like it. The correct way to solve this is by loading the HTML like so:
-        // $domdoc->loadHTML($text, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD); however it seems like the libxml
-        // version that travis uses doesn't work properly and ends up leaving <html><body>, so I'm forced to use
-        // this regex to remove those tags.
-        $text = trim(preg_replace('~<(?:!DOCTYPE|/?(?:html|body))[^>]*>\s*~i', '', $domdoc->saveHTML($domdoc->documentElement)));
+        foreach ($options as $option => $value) {
+            $params[$option] = $value;
+        }
+
+        // The noclean option has been renamed to clean.
+        if (array_key_exists('noclean', $params)) {
+            $params['clean'] = !$params['noclean'];
+            unset($params['noclean']);
+        }
     }
 
-    return $text;
+    if ($format !== null) {
+        $params['format'] = $format;
+    }
+
+    return \core\di::get(\core\formatting::class)->format_text(...$params);
 }
 
 /**
@@ -1428,86 +1451,97 @@ function reset_text_filters_cache($phpunitreset = false) {
  * @return string
  */
 function format_string($string, $striplinks = true, $options = null) {
-    global $CFG, $PAGE;
+    global $CFG;
 
-    // We'll use a in-memory cache here to speed up repeated strings.
-    static $strcache = false;
+    // Manually include the formatting class for now until after the release after 4.5 LTS.
+    require_once("{$CFG->libdir}/classes/formatting.php");
 
-    if (empty($CFG->version) or $CFG->version < 2013051400 or during_initial_install()) {
-        // Do not filter anything during installation or before upgrade completes.
-        return $string = strip_tags($string);
-    }
+    $params = [
+        'string' => $string,
+        'striplinks' => (bool) $striplinks,
+    ];
 
-    if ($strcache === false or count($strcache) > 2000) {
-        // This number might need some tuning to limit memory usage in cron.
-        $strcache = array();
-    }
-
-    if (is_numeric($options)) {
+    // This method only expects either:
+    // - an array of options;
+    // - a stdClass of options to be cast to an array; or
+    // - an integer courseid.
+    if ($options instanceof \core\context) {
+        // A common mistake has been to call this function with a context object.
+        // This has never been expected, or nor supported.
+        debugging(
+            'The options argument should not be a context object directly. ' .
+                ' Please pass an array with a context key instead.',
+            DEBUG_DEVELOPER,
+        );
+        $params['context'] = $options;
+        $options = [];
+    } else if (is_numeric($options)) {
         // Legacy courseid usage.
-        $options  = array('context' => context_course::instance($options));
-    } else {
-        // Detach object, we can not modify it.
-        $options = (array)$options;
-    }
-
-    if (empty($options['context'])) {
-        // Fallback to $PAGE->context this may be problematic in CLI and other non-standard pages :-(.
-        $options['context'] = $PAGE->context;
-    } else if (is_numeric($options['context'])) {
-        $options['context'] = context::instance_by_id($options['context']);
-    }
-    if (!isset($options['filter'])) {
-        $options['filter'] = true;
-    }
-
-    $options['escape'] = !isset($options['escape']) || $options['escape'];
-
-    if (!$options['context']) {
-        // We did not find any context? weird.
-        return $string = strip_tags($string);
-    }
-
-    // Calculate md5.
-    $cachekeys = array($string, $striplinks, $options['context']->id,
-        $options['escape'], current_language(), $options['filter']);
-    $md5 = md5(implode('<+>', $cachekeys));
-
-    // Fetch from cache if possible.
-    if (isset($strcache[$md5])) {
-        return $strcache[$md5];
-    }
-
-    // First replace all ampersands not followed by html entity code
-    // Regular expression moved to its own method for easier unit testing.
-    $string = $options['escape'] ? replace_ampersands_not_followed_by_entity($string) : $string;
-
-    if (!empty($CFG->filterall) && $options['filter']) {
-        $filtermanager = filter_manager::instance();
-        $filtermanager->setup_page_for_filters($PAGE, $options['context']); // Setup global stuff filters may have.
-        $string = $filtermanager->filter_string($string, $options['context']);
-    }
-
-    // If the site requires it, strip ALL tags from this string.
-    if (!empty($CFG->formatstringstriptags)) {
-        if ($options['escape']) {
-            $string = str_replace(array('<', '>'), array('&lt;', '&gt;'), strip_tags($string));
-        } else {
-            $string = strip_tags($string);
+        $params['context'] = \core\context\course::instance($options);
+        $options = [];
+    } else if (is_array($options) || is_a($options, \stdClass::class)) {
+        $options = (array) $options;
+        if (isset($options['context'])) {
+            if (is_numeric($options['context'])) {
+                // A contextid was passed usage.
+                $params['context'] = \core\context::instance_by_id($options['context']);
+            } else if ($options['context'] instanceof \core\context) {
+                $params['context'] = $options['context'];
+            } else {
+                debugging(
+                    'An invalid value for context was provided.',
+                    DEBUG_DEVELOPER,
+                );
+            }
         }
-    } else {
-        // Otherwise strip just links if that is required (default).
-        if ($striplinks) {
-            // Strip links in string.
-            $string = strip_links($string);
-        }
-        $string = clean_text($string);
+    } else if ($options !== null) {
+        // Something else was passed, so we'll just use an empty array.
+        debugging(sprintf(
+            'The options argument should be an Array, or stdclass. %s passed.',
+            gettype($options),
+        ), DEBUG_DEVELOPER);
+
+        // Attempt to cast to array since we always used to, but throw in some debugging.
+        $options = array_filter(
+            (array) $options,
+            fn ($key) => !is_numeric($key),
+            ARRAY_FILTER_USE_KEY,
+        );
     }
 
-    // Store to cache.
-    $strcache[$md5] = $string;
+    if (isset($options['filter'])) {
+        $params['filter'] = (bool) $options['filter'];
+    } else {
+        $params['filter'] = true;
+    }
 
-    return $string;
+    if (isset($options['escape'])) {
+        $params['escape'] = (bool) $options['escape'];
+    } else {
+        $params['escape'] = true;
+    }
+
+    $validoptions = [
+        'string',
+        'striplinks',
+        'context',
+        'filter',
+        'escape',
+    ];
+
+    if ($options) {
+        $invalidoptions = array_diff(array_keys($options), $validoptions);
+        if ($invalidoptions) {
+            debugging(sprintf(
+                'The following options are not valid: %s',
+                implode(', ', $invalidoptions),
+            ), DEBUG_DEVELOPER);
+        }
+    }
+
+    return \core\di::get(\core\formatting::class)->format_string(
+        ...$params,
+    );
 }
 
 /**
@@ -1519,7 +1553,7 @@ function format_string($string, $striplinks = true, $options = null) {
  * @return string
  */
 function replace_ampersands_not_followed_by_entity($string) {
-    return preg_replace("/\&(?![a-zA-Z0-9#]{1,8};)/", "&amp;", $string);
+    return preg_replace("/\&(?![a-zA-Z0-9#]{1,8};)/", "&amp;", $string ?? '');
 }
 
 /**
@@ -1645,6 +1679,12 @@ function trusttext_strip($text) {
 function trusttext_pre_edit($object, $field, $context) {
     $trustfield  = $field.'trust';
     $formatfield = $field.'format';
+
+    if ($object->$formatfield == FORMAT_MARKDOWN) {
+        // We do not have a way to sanitise Markdown texts,
+        // luckily editors for this format should not have XSS problems.
+        return $object;
+    }
 
     if (!$object->$trustfield or !trusttext_trusted($context)) {
         $object->$field = clean_text($object->$field, $object->$formatfield);
@@ -1822,7 +1862,7 @@ function purify_html($text, $options = array()) {
         $config = HTMLPurifier_Config::createDefault();
 
         $config->set('HTML.DefinitionID', 'moodlehtml');
-        $config->set('HTML.DefinitionRev', 6);
+        $config->set('HTML.DefinitionRev', 7);
         $config->set('Cache.SerializerPath', $cachedir);
         $config->set('Cache.SerializerPermissions', $CFG->directorypermissions);
         $config->set('Core.NormalizeNewlines', false);
@@ -1861,10 +1901,13 @@ function purify_html($text, $options = array()) {
             $def->addElement('algebra', 'Inline', 'Inline', array());                   // Algebra syntax, equivalent to @@xx@@.
             $def->addElement('lang', 'Block', 'Flow', array(), array('lang'=>'CDATA')); // Original multilang style - only our hacked lang attribute.
             $def->addAttribute('span', 'xxxlang', 'CDATA');                             // Current very problematic multilang.
+            // Enable the bidirectional isolate element and its span equivalent.
+            $def->addElement('bdi', 'Inline', 'Flow', 'Common');
+            $def->addAttribute('span', 'dir', 'Enum#ltr,rtl,auto');
 
             // Media elements.
             // https://html.spec.whatwg.org/#the-video-element
-            $def->addElement('video', 'Block', 'Optional: #PCDATA | Flow | source | track', 'Common', [
+            $def->addElement('video', 'Inline', 'Optional: #PCDATA | Flow | source | track', 'Common', [
                 'src' => 'URI',
                 'crossorigin' => 'Enum#anonymous,use-credentials',
                 'poster' => 'URI',
@@ -1878,7 +1921,7 @@ function purify_html($text, $options = array()) {
                 'height' => 'Length',
             ]);
             // https://html.spec.whatwg.org/#the-audio-element
-            $def->addElement('audio', 'Block', 'Optional: #PCDATA | Flow | source | track', 'Common', [
+            $def->addElement('audio', 'Inline', 'Optional: #PCDATA | Flow | source | track', 'Common', [
                 'src' => 'URI',
                 'crossorigin' => 'Enum#anonymous,use-credentials',
                 'preload' => 'Enum#auto,metadata,none',
@@ -2217,11 +2260,19 @@ function highlightfast($needle, $haystack) {
  * @return string
  */
 function get_html_lang_attribute_value(string $langcode): string {
-    if (empty(trim($langcode))) {
-        // If the language code passed is an empty string, return 'unknown'.
-        return 'unknown';
+    $langcode = clean_param($langcode, PARAM_LANG);
+    if ($langcode === '') {
+        return 'en';
     }
-    return str_replace('_', '-', $langcode);
+
+    // Grab language ISO code from lang config. If it differs from English, then it's been specified and we can return it.
+    $langiso = (string) (new lang_string('iso6391', 'core_langconfig', null, $langcode));
+    if ($langiso !== 'en') {
+        return $langiso;
+    }
+
+    // Where we cannot determine the value from lang config, use the first two characters from the lang code.
+    return substr($langcode, 0, 2);
 }
 
 /**
@@ -2233,6 +2284,16 @@ function get_html_lang_attribute_value(string $langcode): string {
  * @return string Attributes
  */
 function get_html_lang($dir = false) {
+    global $CFG;
+
+    $currentlang = current_language();
+    if (isset($CFG->lang) && $currentlang !== $CFG->lang && !get_string_manager()->translation_exists($currentlang)) {
+        // Use the default site language when the current language is not available.
+        $currentlang = $CFG->lang;
+        // Fix the current language.
+        fix_current_language($currentlang);
+    }
+
     $direction = '';
     if ($dir) {
         if (right_to_left()) {
@@ -2241,8 +2302,9 @@ function get_html_lang($dir = false) {
             $direction = ' dir="ltr"';
         }
     }
+
     // Accessibility: added the 'lang' attribute to $direction, used in theme <html> tag.
-    $language = get_html_lang_attribute_value(current_language());
+    $language = get_html_lang_attribute_value($currentlang);
     @header('Content-Language: '.$language);
     return ($direction.' lang="'.$language.'" xml:lang="'.$language.'"');
 }
@@ -2325,7 +2387,7 @@ function link_arrow_right($text, $url='', $accesshide=false, $addclass='', $addp
     if (!$url) {
         $arrowclass .= $addclass;
     }
-    $arrow = '<span class="'.$arrowclass.'">'.$OUTPUT->rarrow().'</span>';
+    $arrow = '<span class="'.$arrowclass.'" aria-hidden="true">'.$OUTPUT->rarrow().'</span>';
     $htmltext = '';
     if ($text) {
         $htmltext = '<span class="arrow_text">'.$text.'</span>&nbsp;';
@@ -2367,7 +2429,7 @@ function link_arrow_left($text, $url='', $accesshide=false, $addclass='', $addpa
     if (! $url) {
         $arrowclass .= $addclass;
     }
-    $arrow = '<span class="'.$arrowclass.'">'.$OUTPUT->larrow().'</span>';
+    $arrow = '<span class="'.$arrowclass.'" aria-hidden="true">'.$OUTPUT->larrow().'</span>';
     $htmltext = '';
     if ($text) {
         $htmltext = '&nbsp;<span class="arrow_text">'.$text.'</span>';
@@ -2468,7 +2530,6 @@ function print_collapsible_region_start($classes, $id, $caption, $userpref = '',
 
     // Work out the initial state.
     if (!empty($userpref) and is_string($userpref)) {
-        user_preference_allow_ajax_update($userpref, PARAM_BOOL);
         $collapsed = get_user_preferences($userpref, $default);
     } else {
         $collapsed = $default;
@@ -2652,7 +2713,7 @@ function print_recent_activity_note($time, $user, $text, $link, $return=false, $
  * outputs a simple list structure in XHTML.
  * The data is taken from the serialised array stored in the course record.
  *
- * @param course $course A {@link $COURSE} object.
+ * @param stdClass $course A course object.
  * @param array $sections
  * @param course_modinfo $modinfo
  * @param string $strsection
@@ -3119,7 +3180,6 @@ function print_maintenance_message() {
 
     $PAGE->set_pagetype('maintenance-message');
     $PAGE->set_pagelayout('maintenance');
-    $PAGE->set_title(strip_tags($SITE->fullname));
     $PAGE->set_heading($SITE->fullname);
     echo $OUTPUT->header();
     echo $OUTPUT->heading(get_string('sitemaintenance', 'admin'));
@@ -3260,17 +3320,26 @@ function debugging($message = '', $level = DEBUG_NORMAL, $backtrace = null) {
             // Script does not want any errors or debugging in output,
             // we send the info to error log instead.
             error_log('Debugging: ' . $message . ' in '. PHP_EOL . $from);
-
         } else if ($forcedebug or $CFG->debugdisplay) {
             if (!defined('DEBUGGING_PRINTED')) {
                 define('DEBUGGING_PRINTED', 1); // Indicates we have printed something.
             }
+
             if (CLI_SCRIPT) {
                 echo "++ $message ++\n$from";
             } else {
-                echo '<div class="notifytiny debuggingmessage" data-rel="debugging">' , $message , $from , '</div>';
-            }
+                if (property_exists($CFG, 'debug_developer_debugging_as_error')) {
+                    $showaserror = $CFG->debug_developer_debugging_as_error;
+                } else {
+                    $showaserror = (bool) get_whoops();
+                }
 
+                if ($showaserror) {
+                    trigger_error($message, E_USER_NOTICE);
+                } else {
+                    echo '<div class="notifytiny debuggingmessage" data-rel="debugging">', $message, $from, '</div>';
+                }
+            }
         } else {
             trigger_error($message . $from, E_USER_NOTICE);
         }
@@ -3428,7 +3497,7 @@ class html_progress_trace extends progress_trace {
      * @return void Output is echo'd
      */
     public function output($message, $depth = 0) {
-        echo '<p>', str_repeat('&#160;&#160;', $depth), htmlspecialchars($message), "</p>\n";
+        echo '<p>', str_repeat('&#160;&#160;', $depth), htmlspecialchars($message, ENT_COMPAT), "</p>\n";
         flush();
     }
 }
@@ -3469,7 +3538,7 @@ class html_list_progress_trace extends progress_trace {
         if ($samedepth) {
             echo "</li>\n<li>";
         }
-        echo htmlspecialchars($message);
+        echo htmlspecialchars($message, ENT_COMPAT);
         flush();
     }
 
@@ -3523,7 +3592,7 @@ class error_log_progress_trace extends progress_trace {
  * @package core
  */
 class progress_trace_buffer extends progress_trace {
-    /** @var progres_trace */
+    /** @var progress_trace */
     protected $trace;
     /** @var bool do we pass output out */
     protected $passthrough;
@@ -3693,7 +3762,7 @@ function print_password_policy() {
  *                which format to output the doclink in.
  * @param string|object|array $a An object, string or number that can be used
  *      within translation strings
- * @return Object An object containing:
+ * @return stdClass An object containing:
  * - heading: Any heading that there may be for this help string.
  * - text: The wiki-formatted help string.
  * - doclink: An object containing a link, the linktext, and any additional
@@ -3720,7 +3789,6 @@ function get_formatted_help_string($identifier, $component, $ajax = false, $a = 
         $options = new stdClass();
         $options->trusted = false;
         $options->noclean = false;
-        $options->smiley = false;
         $options->filter = false;
         $options->para = true;
         $options->newlines = false;
