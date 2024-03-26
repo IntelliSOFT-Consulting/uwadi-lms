@@ -1,0 +1,51 @@
+services:
+  db:
+    image: mysql:5.7
+    container_name: db
+    environment:
+      MYSQL_ROOT_PASSWORD: changeme.
+      MYSQL_DATABASE: uwadi
+      MYSQL_USER: changeme
+      MYSQL_PASSWORD: changeme.
+      UPLOAD_LIMIT: 10000000000
+    ports:
+      - "9907:3306"
+    networks:
+      - mydb
+    volumes:
+      - ./db.sql:/docker-entrypoint-initdb.d/db.sql 
+      - ~/uwadi-mysql-data:/var/lib/mysql
+  web:
+    build: .
+    restart: always
+    container_name: uwadi
+    ports:
+      - "8700:80"
+    volumes:
+      - ../:/var/www/html/moodle/
+    networks:
+      - mydb
+    depends_on:
+      - db
+    environment:
+      DB_HOST: db
+      DB_USER: changeme
+      DB_PASSWORD: changeme.
+      DB_NAME: uwadi
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: uwadi_admin
+    ports:
+      - 8184:80
+    environment:
+      MYSQL_USER: changeme
+      MYSQL_PASSWORD: changeme.
+      MYSQL_ROOT_PASSWORD: changeme.
+      UPLOAD_LIMIT: 10000000000
+    networks:
+      - mydb
+volumes:
+  db_data:
+
+networks:
+  mydb:
